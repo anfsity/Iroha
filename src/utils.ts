@@ -4,15 +4,15 @@ import * as readline from "readline";
 import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
 import "colors";
 
-export function showProgess(valFn: () => string | number): NodeJS.Timeout {
+export function showProgress(valFn: () => string | number): NodeJS.Timeout {
   return setInterval(() => {
     readline.clearLine(process.stdout, 0);
     readline.cursorTo(process.stdout, 0);
-    process.stdout.write("Progess: " + "${valFn()}".green);
+    process.stdout.write("Progress: " + `${valFn()}`.green);
   }, 500);
 }
 
-export function clearProgess(interval: NodeJS.Timeout): void {
+export function clearProgress(interval: NodeJS.Timeout): void {
   clearInterval(interval);
   readline.clearLine(process.stdout, 0);
   readline.cursorTo(process.stdout, 0);

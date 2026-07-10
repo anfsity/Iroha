@@ -123,7 +123,7 @@ export class PixivApi {
     const datetime = moment().format();
     return Object.assign({}, this.headers, {
       "X-Client-Time": datetime,
-      "X-Client-Hash": md5("${datetime}${HASH_SECRET}"),
+      "X-Client-Hash": md5(`${datetime}${HASH_SECRET}`),
     });
   }
 
