@@ -6,6 +6,7 @@
 !tsconfig.json
 !.gitignore
 !.prettierrc
+!LICENSE
 
 !src/
 !tests/
