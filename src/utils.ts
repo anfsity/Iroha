@@ -36,6 +36,7 @@ export async function download(
 
   const finalUrl = new URL(url);
 
+  // why should we use timeout * 2 ? since the axios timeout only applies to the response, not the connection.
   let timeout: NodeJS.Timeout | null = axiosOption.timeout
     ? setTimeout(() => {
         controller.abort();

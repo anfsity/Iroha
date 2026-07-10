@@ -16,6 +16,7 @@ export class Illustrator {
 
   async setExampleIllusts(pillustsJSON: PixivIllustJSON[]): Promise<void> {
     this.exampleIllusts = [];
+    // Network requests are sent in parallel only when requesting a ugoira.
     const results = await Promise.all(
       pillustsJSON.map((json) => Illust.getIllusts(json)),
     );
