@@ -207,6 +207,9 @@ importers:
 
   .:
     dependencies:
+      appdata-path:
+        specifier: ^1.0.0
+        version: 1.0.0
       axios:
         specifier: ^1.18.1
         version: 1.18.1
@@ -603,6 +606,9 @@ packages:
   agent-base@9.0.0:
     resolution: {integrity: sha512-TQf59BsZnytt8GdJKLPfUZ54g/iaUL2OWDSFCCvMOhsHduDQxO8xC4PNeyIkVcA5KwL2phPSv0douC0fgWzmnA==}
     engines: {node: '>= 20'}
+
+  appdata-path@1.0.0:
+    resolution: {integrity: sha512-ZbH3ezXfnT/YE3NdqduIt4lBV+H0ybvA2Qx3K76gIjQvh8gROpDFdDLpx6B1QJtW7zxisCbpTlCLhKqoR8cDBw==}
 
   assertion-error@2.0.1:
     resolution: {integrity: sha512-Izi8RQcffqCeNVgFigKli1ssklIbpHnCYc6AknXGYoB6grJqyeby7jv12JUQgmTAnIDnbck1uxksT4dzN3PWBA==}
@@ -1404,6 +1410,8 @@ snapshots:
       - supports-color
 
   agent-base@9.0.0: {}
+
+  appdata-path@1.0.0: {}
 
   assertion-error@2.0.1: {}
 

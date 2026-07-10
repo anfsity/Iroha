@@ -7,7 +7,7 @@ let pixiv: PixivApi;
 export class Illustrator {
   constructor(
     public id: number | string,
-    public name: string,
+    public name: string = "",
     public exampleIllusts: Illust[] = [],
     public next: Record<string, string | null> = {
       illust: null,

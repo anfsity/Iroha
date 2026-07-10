@@ -27,6 +27,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "appdata-path": "^1.0.0",
     "axios": "^1.18.1",
     "blueimp-md5": "^2.19.0",
     "colors": "^1.4.0",
