@@ -10,6 +10,14 @@ interface UserData {
   [key: string]: any;
 }
 
+interface DownloadConfig {
+  thread: number;
+  timeout: number;
+  path?: string;
+  tmp?: string;
+  autoRename?: boolean;
+}
+
 interface PixivIllustResponse {
   illusts: any[];
   next_url: string | null;
@@ -30,20 +38,9 @@ interface PixivIllustJSON {
   }[];
 }
 
-interface PixivClient {
-  ugoiraMetaData(id: number | string): Promise<PixivUgoiraMeta>;
-  userDetail(id: number | string): Promise<{ user: UserData }>;
-  userIllusts(id: number | string): Promise<PixivIllustResponse>;
-  userBookmarksIllust(
-    id: number | string,
-    params?: string | { restrict: string },
-  ): Promise<PixivIllustResponse>;
-  requestUrl(url: string): Promise<PixivIllustResponse>;
-}
-
-
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 var ugoiraMeta: boolean;
 var p_debug: boolean;
+var proxyAgent: import("proxy-agent").ProxyAgent;

@@ -1,7 +1,8 @@
 import "colors";
 import Illust from "./illustration.js";
+import PixivApi from "./pixiv-api-client.js";
 
-let pixiv: PixivClient;
+let pixiv: PixivApi;
 
 export class Illustrator {
   constructor(
@@ -23,7 +24,7 @@ export class Illustrator {
     this.exampleIllusts = results.flat();
   }
 
-  static setPixiv(p: PixivClient): void {
+  static setPixiv(p: PixivApi): void {
     pixiv = p;
   }
 
@@ -45,7 +46,7 @@ export class Illustrator {
 
   async getSomeIllusts(
     type: string,
-    option: string | null = null,
+    option?: Record<string, any>,
   ): Promise<Illust[]> {
     let result: Illust[] = [];
     let json: PixivIllustResponse;
@@ -58,7 +59,7 @@ export class Illustrator {
       if (type === "illust") {
         json = await pixiv.userIllusts(this.id);
       } else if (type === "bookmark") {
-        json = await pixiv.userBookmarksIllust(this.id, option ?? undefined);
+        json = await pixiv.userBookmarksIllust(this.id, option);
       } else {
         throw new Error(`Unsupported type: ${type}`);
       }
@@ -81,7 +82,9 @@ export class Illustrator {
   }
 
   async bookmarks(isPrivate: boolean = false): Promise<Illust[]> {
-    return this.getSomeIllusts("bookmark", isPrivate ? "private" : "public");
+    return this.getSomeIllusts("bookmark", {
+      restrict: isPrivate ? "private" : "public",
+    });
   }
 
   hasNext(type: string): boolean {

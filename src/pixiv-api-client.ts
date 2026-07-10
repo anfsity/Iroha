@@ -44,6 +44,8 @@ const CLIENT_SECRET: string = "lsACyCD94FhDUtGTXi3QzcFE2uU1hqtDaKeqrdwj";
 const HASH_SECRET: string =
   "28c1fdd170a5204386cb1313c7077b34f83e4aaf4aa829ce78c231e05b0bae2c";
 
+let http: AxiosInstance = axios.create();
+
 async function callApi(
   url: string,
   options: AxiosRequestConfig,
@@ -90,6 +92,11 @@ async function callApi(
   }
 }
 
+export type PixivOptions = {
+  restrict?: "public" | "private";
+  [key: string]: any;
+};
+
 export class PixivApi {
   private headers: Record<string, string>;
   private axiosInstance: AxiosInstance;
@@ -110,10 +117,9 @@ export class PixivApi {
     this.axiosInstance = axios.create();
   }
 
-  public setAgent(agent: any): void {
-    this.axiosInstance = axios.create({
-      httpsAgent: agent,
-    });
+  public static setAgent(agent: any): void {
+    http.defaults.httpsAgent = agent;
+    http.defaults.httpAgent = agent;
   }
 
   private getDefaultHeaders(): Record<string, string> {
@@ -206,7 +212,7 @@ export class PixivApi {
     this.headers["Accept-Language"] = lang;
   }
 
-  private async requestUrl(
+  public async requestUrl(
     url: string,
     options: AxiosRequestConfig = {},
   ): Promise<any> {
@@ -237,7 +243,7 @@ export class PixivApi {
     return this.requestUrl("/v1/user/me/state");
   }
 
-  public searchIllust(word: string, options?: Record<string, any>) {
+  public searchIllust(word: string, options?: PixivOptions) {
     if (!word) return Promise.reject(new Error("word required"));
     const queryString = qs.stringify(
       Object.assign(
@@ -250,7 +256,7 @@ export class PixivApi {
 
   public searchIllustPopularPreview(
     word: string,
-    options?: Record<string, any>,
+    options?: PixivOptions,
   ) {
     if (!word) return Promise.reject(new Error("word required"));
     const queryString = qs.stringify(
@@ -259,7 +265,7 @@ export class PixivApi {
     return this.requestUrl(`/v1/search/popular-preview/illust?${queryString}`);
   }
 
-  public searchNovel(word: string, options?: Record<string, any>) {
+  public searchNovel(word: string, options?: PixivOptions) {
     if (!word) return Promise.reject(new Error("word required"));
     const queryString = qs.stringify(
       Object.assign(
@@ -272,7 +278,7 @@ export class PixivApi {
 
   public searchNovelPopularPreview(
     word: string,
-    options?: Record<string, any>,
+    options?: PixivOptions,
   ) {
     if (!word) return Promise.reject(new Error("word required"));
     const queryString = qs.stringify(
@@ -283,7 +289,7 @@ export class PixivApi {
 
   public searchIllustBookmarkRanges(
     word: string,
-    options?: Record<string, any>,
+    options?: PixivOptions,
   ) {
     if (!word) return Promise.reject(new Error("word required"));
     const queryString = qs.stringify(
@@ -294,7 +300,7 @@ export class PixivApi {
 
   public searchNovelBookmarkRanges(
     word: string,
-    options?: Record<string, any>,
+    options?: PixivOptions,
   ) {
     if (!word) return Promise.reject(new Error("word required"));
     const queryString = qs.stringify(
@@ -318,19 +324,19 @@ export class PixivApi {
     return this.requestUrl(`/v2/search/autocomplete?${qs.stringify({ word })}`);
   }
 
-  public userDetail(id: number | string, options?: Record<string, any>) {
+  public userDetail(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(Object.assign({ user_id: id }, options));
     return this.requestUrl(`/v1/user/detail?${queryString}`);
   }
 
-  public userIllusts(id: number | string, options?: Record<string, any>) {
+  public userIllusts(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(Object.assign({ user_id: id }, options));
     return this.requestUrl(`/v1/user/illusts?${queryString}`);
   }
 
-  public userNovels(id: number | string, options?: Record<string, any>) {
+  public userNovels(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(Object.assign({ user_id: id }, options));
     return this.requestUrl(`/v1/user/novels?${queryString}`);
@@ -338,7 +344,7 @@ export class PixivApi {
 
   public userBookmarksIllust(
     id: number | string,
-    options?: Record<string, any>,
+    options?: PixivOptions,
   ) {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(
@@ -347,7 +353,7 @@ export class PixivApi {
     return this.requestUrl(`/v1/user/bookmarks/illust?${queryString}`);
   }
 
-  public userBookmarkIllustTags(options?: Record<string, any>) {
+  public userBookmarkIllustTags(options?: PixivOptions) {
     const queryString = qs.stringify(
       Object.assign({ restrict: "public" }, options),
     );
@@ -356,7 +362,7 @@ export class PixivApi {
 
   public illustBookmarkDetail(
     id: number | string,
-    options?: Record<string, any>,
+    options?: PixivOptions,
   ) {
     if (!id) return Promise.reject(new Error("illust_id required"));
     const queryString = qs.stringify(Object.assign({ illust_id: id }, options));
@@ -365,7 +371,7 @@ export class PixivApi {
 
   public userBookmarksNovel(
     id: number | string,
-    options?: Record<string, any>,
+    options?: PixivOptions,
   ) {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(
@@ -374,7 +380,7 @@ export class PixivApi {
     return this.requestUrl(`/v1/user/bookmarks/novel?${queryString}`);
   }
 
-  public userBookmarkNovelTags(options?: Record<string, any>) {
+  public userBookmarkNovelTags(options?: PixivOptions) {
     const queryString = qs.stringify(
       Object.assign({ restrict: "public" }, options),
     );
@@ -385,7 +391,7 @@ export class PixivApi {
     return this.requestUrl("/v1/walkthrough/illusts");
   }
 
-  public illustComments(id: number | string, options?: Record<string, any>) {
+  public illustComments(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("illust_id required"));
     const queryString = qs.stringify(
       Object.assign({ illust_id: id, include_total_comments: true }, options),
@@ -393,7 +399,7 @@ export class PixivApi {
     return this.requestUrl(`/v1/illust/comments?${queryString}`);
   }
 
-  public illustCommentsV2(id: number | string, options?: Record<string, any>) {
+  public illustCommentsV2(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("illust_id required"));
     const queryString = qs.stringify(Object.assign({ illust_id: id }, options));
     return this.requestUrl(`/v2/illust/comments?${queryString}`);
@@ -406,40 +412,40 @@ export class PixivApi {
     );
   }
 
-  public illustRelated(id: number | string, options?: Record<string, any>) {
+  public illustRelated(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("illust_id required"));
     const queryString = qs.stringify(Object.assign({ illust_id: id }, options));
     return this.requestUrl(`/v2/illust/related?${queryString}`);
   }
 
-  public illustDetail(id: number | string, options?: Record<string, any>) {
+  public illustDetail(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("illust_id required"));
     const queryString = qs.stringify(Object.assign({ illust_id: id }, options));
     return this.requestUrl(`/v1/illust/detail?${queryString}`);
   }
 
-  public illustNew(options?: Record<string, any>) {
+  public illustNew(options?: PixivOptions) {
     const queryString = qs.stringify(
       Object.assign({ content_type: "illust" }, options),
     );
     return this.requestUrl(`/v1/illust/new?${queryString}`);
   }
 
-  public illustFollow(options?: Record<string, any>) {
+  public illustFollow(options?: PixivOptions) {
     const queryString = qs.stringify(
       Object.assign({ restrict: "all" }, options),
     );
     return this.requestUrl(`/v2/illust/follow?${queryString}`);
   }
 
-  public illustRecommended(options?: Record<string, any>) {
+  public illustRecommended(options?: PixivOptions) {
     const queryString = qs.stringify(
       Object.assign({ include_ranking_illusts: true }, options),
     );
     return this.requestUrl(`/v1/illust/recommended?${queryString}`);
   }
 
-  public illustRanking(options?: Record<string, any>) {
+  public illustRanking(options?: PixivOptions) {
     const queryString = qs.stringify(Object.assign({ mode: "day" }, options));
     return this.requestUrl(`/v1/illust/ranking?${queryString}`);
   }
@@ -484,13 +490,13 @@ export class PixivApi {
     });
   }
 
-  public trendingTagsIllust(options?: Record<string, any>) {
+  public trendingTagsIllust(options?: PixivOptions) {
     return this.requestUrl(
       `/v1/trending-tags/illust?${qs.stringify(options || {})}`,
     );
   }
 
-  public trendingTagsNovel(options?: Record<string, any>) {
+  public trendingTagsNovel(options?: PixivOptions) {
     return this.requestUrl(
       `/v1/trending-tags/novel?${qs.stringify(options || {})}`,
     );
@@ -576,32 +582,32 @@ export class PixivApi {
     });
   }
 
-  public mangaRecommended(options?: Record<string, any>) {
+  public mangaRecommended(options?: PixivOptions) {
     const queryString = qs.stringify(
       Object.assign({ include_ranking_label: true }, options),
     );
     return this.requestUrl(`/v1/manga/recommended?${queryString}`);
   }
 
-  public mangaNew(options?: Record<string, any>) {
+  public mangaNew(options?: PixivOptions) {
     const queryString = qs.stringify(
       Object.assign({ content_type: "manga" }, options),
     );
     return this.requestUrl(`/v1/illust/new?${queryString}`);
   }
 
-  public novelRecommended(options?: Record<string, any>) {
+  public novelRecommended(options?: PixivOptions) {
     const queryString = qs.stringify(
       Object.assign({ include_ranking_novels: true }, options),
     );
     return this.requestUrl(`/v1/novel/recommended?${queryString}`);
   }
 
-  public novelNew(options?: Record<string, any>) {
+  public novelNew(options?: PixivOptions) {
     return this.requestUrl(`/v1/novel/new?${qs.stringify(options || {})}`);
   }
 
-  public novelComments(id: number | string, options?: Record<string, any>) {
+  public novelComments(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("novel_id required"));
     const queryString = qs.stringify(
       Object.assign({ novel_id: id, include_total_comments: true }, options),
@@ -609,7 +615,7 @@ export class PixivApi {
     return this.requestUrl(`/v1/novel/comments?${queryString}`);
   }
 
-  public novelCommentsV2(id: number | string, options?: Record<string, any>) {
+  public novelCommentsV2(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("novel_id required"));
     const queryString = qs.stringify(Object.assign({ novel_id: id }, options));
     return this.requestUrl(`/v2/novel/comments?${queryString}`);
@@ -641,7 +647,7 @@ export class PixivApi {
     return this.requestUrl(`/v1/novel/text?${qs.stringify({ novel_id: id })}`);
   }
 
-  public novelFollow(options?: Record<string, any>) {
+  public novelFollow(options?: PixivOptions) {
     const queryString = qs.stringify(
       Object.assign({ restrict: "all" }, options),
     );
@@ -652,27 +658,27 @@ export class PixivApi {
     return this.requestUrl("/v1/novel/mypixiv");
   }
 
-  public novelRanking(options?: Record<string, any>) {
+  public novelRanking(options?: PixivOptions) {
     const queryString = qs.stringify(Object.assign({ mode: "day" }, options));
     return this.requestUrl(`/v1/novel/ranking?${queryString}`);
   }
 
   public novelBookmarkDetail(
     id: number | string,
-    options?: Record<string, any>,
+    options?: PixivOptions,
   ) {
     if (!id) return Promise.reject(new Error("novel_id required"));
     const queryString = qs.stringify(Object.assign({ novel_id: id }, options));
     return this.requestUrl(`/v2/novel/bookmark/detail?${queryString}`);
   }
 
-  public userRecommended(options?: Record<string, any>) {
+  public userRecommended(options?: PixivOptions) {
     return this.requestUrl(
       `/v1/user/recommended?${qs.stringify(options || {})}`,
     );
   }
 
-  public userFollowing(id: number | string, options?: Record<string, any>) {
+  public userFollowing(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(
       Object.assign({ user_id: id, restrict: "public" }, options),
@@ -687,7 +693,7 @@ export class PixivApi {
     );
   }
 
-  public userFollower(id: number | string, options?: Record<string, any>) {
+  public userFollower(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(Object.assign({ user_id: id }, options));
     return this.requestUrl(`/v1/user/follower?${queryString}`);

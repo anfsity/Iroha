@@ -7,14 +7,6 @@ import Illustrator from "./illustrator.js";
 
 const pixivRefer = "https://www.pixiv.net/";
 
-interface DownloadConfig {
-  path: string;
-  tmp: string;
-  thread: number;
-  timeout: number;
-  autoRename: boolean;
-}
-
 interface DownloadListResult {
   dir: string;
   illusts: Illust[];
@@ -61,7 +53,7 @@ export async function downloadByIllustrators(
 
     await downloadIllusts(
       info.illusts,
-      path.join(config.path, info.dir),
+      path.join(config.path!, info.dir),
       config.thread,
     );
 
@@ -78,7 +70,7 @@ async function getDownloadListByIllustrator(
   let illusts: Illust[] = [];
 
   const dir = await illustrator.info().then(getIllustratorNewDir);
-  const dldir = path.join(config.path, dir); //< download directory
+  const dldir = path.join(config.path!, dir); //< download directory
   const ugoiraDir = new utils.UgoiraDir(dldir);
 
   const illustExists = (file: string) =>
@@ -124,7 +116,7 @@ export async function downloadByBookmark(
   isPrivate: boolean = false,
 ): Promise<void> {
   const dir = `[bookmark] ${isPrivate ? "Private" : "Public"}`;
-  const dldir = path.join(config.path, dir);
+  const dldir = path.join(config.path!, dir);
   const ugoiraDir = new utils.UgoiraDir(dldir);
   const illustExists = (file: string) =>
     file.endsWith(".zip")
@@ -160,7 +152,7 @@ export async function downloadIllusts(
   dldir: string,
   totalThread: number,
 ): Promise<any[]> {
-  const tempDir = config.tmp;
+  const tempDir = config.tmp!;
   let totalI = 0; //< total illustrations
 
   if (fse.existsSync(tempDir)) fse.removeSync(tempDir);
@@ -274,7 +266,7 @@ async function getIllustratorNewDir(data: {
   id: number | string;
   name: string;
 }): Promise<string> {
-  const mainDir = config.path;
+  const mainDir = config.path!;
   let dldir: string | null = null;
 
   await fse.ensureDir(mainDir);
@@ -326,5 +318,5 @@ export async function downloadByIllusts(illustJSON: any[]): Promise<void> {
     illustJSON.map((json) => Illust.getIllusts(json)),
   );
   let illusts: Illust[] = results.flat();
-  await downloadIllusts(illusts, path.join(config.path, "PID"), config.thread);
+  await downloadIllusts(illusts, path.join(config.path!, "PID"), config.thread);
 }

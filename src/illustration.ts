@@ -1,4 +1,5 @@
 import "colors";
+import type PixivApi from "./pixiv-api-client.js";
 
 interface IllustObject {
   id: number | string;
@@ -7,7 +8,7 @@ interface IllustObject {
   file: string;
 }
 
-let pixiv: PixivClient;
+let pixiv: PixivApi;
 
 export class Illust {
   constructor(
@@ -17,7 +18,7 @@ export class Illust {
     public file: string,
   ) {}
 
-  static setPixiv(p: PixivClient): void {
+  static setPixiv(p: PixivApi): void {
     pixiv = p;
   }
 
