@@ -1,5 +1,6 @@
 import "colors";
 import type PixivApi from "./pixiv-api-client.js";
+import appState from "./appState.js";
 
 interface IllustObject {
   id: number | string;
@@ -47,7 +48,7 @@ export class Illust {
         .replace("img-original", "img-zip-ugoira")
         .replace(/_ugoira0\.(.*)/, "_ugoira1920x1080.zip");
 
-      if (global.ugoiraMeta) {
+      if (appState.ugoiraMeta) {
         try {
           const res = await pixiv.ugoiraMetaData(id);
           const uDelay = res.ugoira_metadata.frames[0]!.delay;

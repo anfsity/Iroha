@@ -8,6 +8,7 @@ import PixivApi from "./pixiv-api-client.js";
 import * as Downloader from "./downloader.js";
 import Illust from "./illustration.js";
 import Illustrator from "./illustrator.js";
+import appState from "./appState.js";
 import { homedir, platform } from "node:os";
 
 function getAppDataPath(appName: string): string {
@@ -105,7 +106,7 @@ export default class Pixiv {
     if (agent) {
       Downloader.setAgent(agent);
       PixivApi.setAgent(agent);
-      proxyAgent = agent;
+      appState.proxyAgent = agent;
     }
   }
 

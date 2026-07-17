@@ -38,6 +38,4 @@ interface PixivIllustJSON {
   }[];
 }
 
-var ugoiraMeta: boolean;
-var p_debug: boolean;
-var proxyAgent: import("proxy-agent").ProxyAgent;
+

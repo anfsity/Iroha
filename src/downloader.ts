@@ -5,6 +5,7 @@ import * as utils from "./utils.js";
 import { sleep } from "./utils.js";
 import Illust from "./illustration.js";
 import Illustrator from "./illustrator.js";
+import appState from "./appState.js";
 
 const pixivRefer = "https://www.pixiv.net/";
 
@@ -236,7 +237,7 @@ export async function downloadIllusts(
           }
 
           if (times === 1) errorThread++;
-          if (p_debug) console.error(e);
+          if (appState.debug) console.error(e);
 
           console.log(
             `  ${times >= 10 ? `[${threadID}]`.bgRed : `[${threadID}]`.bgYellow}\t` +
@@ -255,7 +256,7 @@ export async function downloadIllusts(
   for (let t = 0; t < totalThread; t++) {
     threads.push(
       singleThread(t).catch((e) => {
-        if (p_debug) console.error(e);
+        if (appState.debug) console.error(e);
       }),
     );
   }
