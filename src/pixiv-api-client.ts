@@ -210,7 +210,7 @@ export class PixivApi {
       data,
     };
     const resData = await callApi(
-      "https://oauth.secure.secure.pixiv.net/auth/token",
+      "https://oauth.secure.pixiv.net/auth/token",
       options,
       2,
       this.axiosInstance,

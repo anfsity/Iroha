@@ -19,9 +19,7 @@ const sha256 = (data: string | Buffer): Buffer =>
 
 const oauthPkce = (): PKCEResult => {
   const code_verifier = Base64.fromUint8Array(randToken(), true);
-  const code_challenge = Base64.encodeURI(
-    Base64.fromUint8Array(sha256(code_verifier)),
-  );
+  const code_challenge = Base64.encodeURI(sha256(code_verifier) as any);
 
   return { code_verifier, code_challenge };
 };
