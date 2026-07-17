@@ -38,9 +38,6 @@ interface PixivIllustJSON {
   }[];
 }
 
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
 var ugoiraMeta: boolean;
 var p_debug: boolean;
 var proxyAgent: import("proxy-agent").ProxyAgent;

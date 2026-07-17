@@ -2,6 +2,7 @@ import "colors";
 import fse from "fs-extra";
 import path from "node:path";
 import * as utils from "./utils.js";
+import { sleep } from "./utils.js";
 import Illust from "./illustration.js";
 import Illustrator from "./illustrator.js";
 

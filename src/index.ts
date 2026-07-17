@@ -1,7 +1,6 @@
 import "colors";
 import fse from "fs-extra";
-import path from "node:path";
-import { getAppDataPath } from "appdata-path";
+import path, { join } from "node:path";
 
 import { getProxyAgent, delSysProxy } from "./proxy.js";
 import * as utils from "./utils.js";
@@ -9,7 +8,16 @@ import PixivApi from "./pixiv-api-client.js";
 import * as Downloader from "./downloader.js";
 import Illust from "./illustration.js";
 import Illustrator from "./illustrator.js";
-import { ref } from "node:process";
+import { homedir, platform } from "node:os";
+
+function getAppDataPath(appName: string): string {
+  const baseDir =
+    process.env.APPDATA ||
+    (platform() === "win32"
+      ? join(homedir(), "AppData", "Roaming")
+      : join(homedir(), ".config"));
+  return join(baseDir, appName);
+}
 
 const CONFIG_FILE_DIR: string = getAppDataPath("iroha");
 const CONFIG_FILE = path.resolve(CONFIG_FILE_DIR, "config.json");

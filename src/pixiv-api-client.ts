@@ -37,6 +37,8 @@ import md5 from "blueimp-md5";
 import moment from "moment";
 import * as readline from "readline";
 import logError from "./logError.js";
+import { sleep } from "./utils.js";
+
 
 const BASE_URL: string = "https://app-api.pixiv.net";
 const CLIENT_ID: string = "MOBrBDS8blbauoSck0ZfDbtuzpyT";
@@ -44,18 +46,26 @@ const CLIENT_SECRET: string = "lsACyCD94FhDUtGTXi3QzcFE2uU1hqtDaKeqrdwj";
 const HASH_SECRET: string =
   "28c1fdd170a5204386cb1313c7077b34f83e4aaf4aa829ce78c231e05b0bae2c";
 
-let http: AxiosInstance = axios.create();
+let http: AxiosInstance | null = null;
+
+function getHttp(): AxiosInstance {
+  if (!http) {
+    http = axios.create();
+  }
+  return http;
+}
 
 async function callApi(
   url: string,
   options: AxiosRequestConfig,
   retry: number = 2,
-  axiosInstance: AxiosInstance = axios,
+  axiosInstance?: AxiosInstance,
 ): Promise<any> {
   const finalUrl: string = /^https?:\/\//i.test(url) ? url : BASE_URL + url;
+  const instance = axiosInstance || getHttp();
 
   try {
-    const res = await axios(finalUrl, options);
+    const res = await instance(finalUrl, options);
     return res.data;
   } catch (rawErr: any) {
     const err = rawErr as AxiosError<any>;
@@ -65,7 +75,7 @@ async function callApi(
       readline.cursorTo(process.stdout, 0);
       console.error("Connection reset detected.".gray);
       await sleep(3000);
-      return callApi(url, options, retry);
+      return callApi(url, options, retry, instance);
     }
 
     if (err.response && err.response.data) {
@@ -74,7 +84,7 @@ async function callApi(
       if (/rate limit/i.test(msg)) {
         console.error("Rate limit detected. Pause for 10 mintues.".gray);
         await sleep(10 * 60 * 1000);
-        return callApi(url, options, retry);
+        return callApi(url, options, retry, instance);
       } else {
         throw msg;
       }
@@ -87,7 +97,7 @@ async function callApi(
       console.error(err.message);
       await sleep(1000);
 
-      return callApi(url, options, retry - 1);
+      return callApi(url, options, retry - 1, instance);
     }
   }
 }
@@ -114,12 +124,13 @@ export class PixivApi {
       "App-Version": "5.0.234",
       "User-Agent": "PixivAndroidApp/5.0.234 (Android 9.0; Pixel 3)",
     };
-    this.axiosInstance = axios.create();
+    this.axiosInstance = getHttp();
   }
 
   public static setAgent(agent: any): void {
-    http.defaults.httpsAgent = agent;
-    http.defaults.httpAgent = agent;
+    const instance = getHttp();
+    instance.defaults.httpsAgent = agent;
+    instance.defaults.httpAgent = agent;
   }
 
   private getDefaultHeaders(): Record<string, string> {
