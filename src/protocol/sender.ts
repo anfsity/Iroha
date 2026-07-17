@@ -1,3 +1,8 @@
+/**
+ * Adapted from Tsuk1ko/pxder (https://github.com/Tsuk1ko/pxder)
+ * Original file: src/protocol/sender.js
+ */
+
 import http from "node:http";
 import { data } from "./config.js";
 

@@ -1,4 +1,7 @@
 /**
+ * Adapted from Tsuk1ko/pxder (https://github.com/Tsuk1ko/pxder)
+ * Original file: src/protocol/config.js
+ *
  * Protocol configuration persistence.
  *
  * Manages `protocol.json` in the iroha app data directory, storing the

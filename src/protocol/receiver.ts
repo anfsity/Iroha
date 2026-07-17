@@ -1,3 +1,8 @@
+/**
+ * Adapted from Tsuk1ko/pxder (https://github.com/Tsuk1ko/pxder)
+ * Original file: src/protocol/receiver.js
+ */
+
 import Http from "node:http";
 import type { AddressInfo } from "node:net";
 import * as Config from "./config.js";

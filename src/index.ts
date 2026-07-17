@@ -1,3 +1,8 @@
+/**
+ * Adapted from Tsuk1ko/pxder (https://github.com/Tsuk1ko/pxder)
+ * Original file: src/index.js
+ */
+
 import "colors";
 import fse from "fs-extra";
 import path from "node:path";

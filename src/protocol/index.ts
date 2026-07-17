@@ -1,4 +1,7 @@
 /**
+ * Adapted from Tsuk1ko/pxder (https://github.com/Tsuk1ko/pxder)
+ * Original file: src/protocol/index.js
+ *
  * Windows custom-protocol (`pixiv://`) registration manager.
  *
  * On Windows, this module registers a custom URL protocol handler so

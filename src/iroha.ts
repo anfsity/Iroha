@@ -1,3 +1,8 @@
+/**
+ * Adapted from Tsuk1ko/pxder (https://github.com/Tsuk1ko/pxder)
+ * Original file: bin/pxder
+ */
+
 import "colors";
 import Path from "path";
 import Pixiv from "./index.js";

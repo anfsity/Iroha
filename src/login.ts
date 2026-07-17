@@ -1,3 +1,8 @@
+/**
+ * Adapted from Tsuk1ko/pxder (https://github.com/Tsuk1ko/pxder)
+ * Original file: src/pixiv-login.js
+ */
+
 import { createHash, randomBytes } from "crypto";
 import { Base64 } from "js-base64";
 import { stringify } from "qs";

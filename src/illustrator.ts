@@ -1,3 +1,8 @@
+/**
+ * Adapted from Tsuk1ko/pxder (https://github.com/Tsuk1ko/pxder)
+ * Original file: src/illustrator.js
+ */
+
 import "colors";
 import Illust from "./illustration.js";
 import PixivApi from "./pixiv-api-client.js";

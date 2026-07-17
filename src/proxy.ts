@@ -1,3 +1,8 @@
+/**
+ * Adapted from Tsuk1ko/pxder (https://github.com/Tsuk1ko/pxder)
+ * Original file: src/proxy.js
+ */
+
 import { ProxyAgent } from "proxy-agent";
 
 const envNames: string[] = ["all_proxy", "https_proxy", "http_proxy"].flatMap(
