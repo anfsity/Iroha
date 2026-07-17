@@ -3,6 +3,16 @@ import path from "node:path";
 import * as readline from "readline";
 import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
 import "colors";
+import { homedir, platform } from "node:os";
+
+export function getAppDataPath(appName: string): string {
+  const baseDir =
+    process.env.APPDATA ||
+    (platform() === "win32"
+      ? path.join(homedir(), "AppData", "Roaming")
+      : path.join(homedir(), ".config"));
+  return path.join(baseDir, appName);
+}
 
 export function showProgress(valFn: () => string | number): NodeJS.Timeout {
   return setInterval(() => {

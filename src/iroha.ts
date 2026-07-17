@@ -8,10 +8,10 @@ import appState from "./appState.js";
 import * as LoginProtocol from "./protocol/index.js";
 import receiveLoginCode from "./protocol/receiver.js";
 import { Command } from "commander";
-import readline from "readline-sync";
 import prompts from "prompts";
 import open from "open";
 import { createRequire } from "module";
+import { getAppDataPath } from "./utils.js";
 
 /* -------------------------------------------------------------------------- */
 /*  Package metadata                                                          */
@@ -28,6 +28,11 @@ const pkg: { version: string } = (() => {
     return require("../../package.json");
   }
 })();
+
+const onCancel = () => {
+  console.log("\nOperation cancelled.".yellow);
+  process.exit(0);
+};
 
 /* -------------------------------------------------------------------------- */
 /*  CLI definition                                                            */
@@ -88,32 +93,51 @@ program
 
 const config = Pixiv.readConfig();
 
-main()
-  .then(() => {
+interface systemError {
+  errors: {
+    system?: {
+      message?: string;
+    };
+  };
+}
+
+function isSystemError(err: any): err is systemError {
+  return (
+    err &&
+    typeof err === "object" &&
+    "errors" in err &&
+    err.errors?.system?.message !== undefined
+  );
+}
+
+(async function run(): Promise<void> {
+  try {
+    await main();
     process.exit(0);
-  })
-  .catch((e: unknown) => {
+  } catch (err: unknown) {
     if (appState.debug) {
-      logError(e);
-    } else if (typeof e === "object" && e !== null && "errors" in e) {
-      const err = e as { errors?: { system?: { message?: string } } };
-      const errMsg = err.errors?.system?.message;
-      if (errMsg) {
-        console.error(`\n${"ERROR:".red} ${errMsg}\n`);
-        if (errMsg === "Invalid refresh token") {
-          console.log(
-            "Maybe CLIENT_ID and CLIENT_SECRET are updated, please try to relogin.\n"
-              .yellow,
-          );
-        }
-      } else {
-        logError(e);
-      }
-    } else {
-      logError(e);
+      logError(err);
+      return;
     }
-    process.exit(1);
-  });
+
+    if (isSystemError(err)) {
+      const errMsg = err.errors.system!.message!;
+      console.error(`\n${"ERROR:".red} ${errMsg}\n`);
+
+      if (errMsg === "Invalid refresh token") {
+        console.log(
+          "Maybe CLIENT_ID and CLIENT_SECRET are updated, please try to relogin.\n"
+            .yellow,
+        );
+      }
+      return;
+    }
+
+    logError(err);
+
+    process.exit(0);
+  }
+})();
 
 /* -------------------------------------------------------------------------- */
 /*  Core logic                                                                */
@@ -209,14 +233,10 @@ async function handleArgv(): Promise<boolean> {
   const opts = program.opts();
 
   if (opts.outputConfigDir) {
-    const { getAppDataPath } = require("appdata-path") as {
-      getAppDataPath: (name: string) => string;
-    };
     console.log(getAppDataPath("iroha"));
     return false;
   }
 
-  // Global flags → typed singleton instead of `(global as any)`
   appState.debug = !!opts.debug;
   appState.ugoiraMeta = !!opts.ugoiraMeta;
 
@@ -280,8 +300,9 @@ async function handleLogin(opts: Record<string, unknown>): Promise<void> {
         console.log("Login URL:", login_url.cyan);
         console.log(
           "Waiting login... More details:",
-          "https://git.io/Jt6Lj".cyan,
+          "https://github.com/anfsity/Iroha/blob/main/README.md".cyan,
         );
+
         open(login_url);
         code = await receiveLoginCode();
         await LoginProtocol.uninstall();
@@ -289,9 +310,21 @@ async function handleLogin(opts: Record<string, unknown>): Promise<void> {
         // Fallback: manual code entry
         console.log(
           "Before login, please read this first ->",
-          "https://git.io/Jt6Lj".cyan,
+          "https://github.com/anfsity/Iroha/blob/main/README.md".cyan,
         );
-        if (!readline.keyInYN("Continue?")) return;
+
+        const { confirm } = await prompts(
+          {
+            type: "confirm",
+            name: "confirm",
+            message: "Continue?",
+            initial: true,
+          },
+          { onCancel },
+        );
+
+        if (!confirm) return;
+
         console.log("\nLogin URL:", login_url.cyan);
         await open(login_url);
         code = await promptForCode();
@@ -306,7 +339,10 @@ async function handleLogin(opts: Record<string, unknown>): Promise<void> {
       "\nLogin fail!".red,
       "Please check your input or proxy setting.\n",
     );
-    if (appState.debug) console.error(error);
+
+    if (appState.debug) {
+      console.error(error);
+    }
   }
 }
 
@@ -319,7 +355,8 @@ async function promptForCode(): Promise<string> {
       type: "text",
       name: "code",
       message: "Code:".yellow,
-      validate: (value: string) => (value.trim() ? true : "Code cannot be empty"),
+      validate: (value: string) =>
+        value.trim() ? true : "Code cannot be empty",
     },
     {
       onCancel: () => {
@@ -327,6 +364,7 @@ async function promptForCode(): Promise<string> {
       },
     },
   );
+
   if (typeof response.code === "string") {
     return response.code.trim();
   }
@@ -338,56 +376,71 @@ async function promptForCode(): Promise<string> {
 /* -------------------------------------------------------------------------- */
 
 async function handleSettings(): Promise<void> {
-  let index: number;
-
-  do {
+  while (true) {
     console.clear();
     console.log("Iroha Options".green);
 
-    const optionsMenu = [
-      "Download path\t".yellow +
-        (config.download.path
-          ? config.download.path
-          : "Null, please set one".bgRed),
-      "Download thread\t".yellow + config.download.thread,
-      "Download timeout\t".yellow + config.download.timeout,
-      "Auto rename\t\t".yellow +
-        (config.download.autoRename ? "Enabled" : "Disabled"),
-      "Proxy\t\t".yellow +
-        (checkProxy(config.proxy) && config.proxy
-          ? config.proxy === "disable"
-            ? "Disabled"
-            : config.proxy
-          : "From env vars"),
+    const choices = [
+      {
+        title:
+          `Download path: `.yellow + (config.download.path || "Not set".bgRed),
+        value: "path",
+      },
+      {
+        title: `Download thread: `.yellow + config.download.thread,
+        value: "thread",
+      },
+      {
+        title: `Download timeout: `.yellow + config.download.timeout,
+        value: "timeout",
+      },
+      {
+        title:
+          `Auto rename: `.yellow +
+          (config.download.autoRename ? "Enabled" : "Disabled"),
+        value: "rename",
+      },
+      {
+        title: `Proxy: `.yellow + (config.proxy || "From env vars"),
+        value: "proxy",
+      },
+      { title: "Exit".magenta, value: "exit" },
     ];
 
-    index = readline.keyInSelect(optionsMenu, "Press a key:", {
-      cancel: "Exit".bgMagenta,
-    });
-    console.log();
+    const { action } = await prompts(
+      {
+        type: "select",
+        name: "action",
+        message: "Select a setting to modify:",
+        choices,
+      },
+      { onCancel },
+    );
 
-    switch (index) {
-      case 0:
+    if (!action || action === "exit") break;
+
+    switch (action) {
+      case "path":
         await handleSettingDownloadPath();
         break;
-      case 1:
-        handleSettingDownloadThread();
+      case "thread":
+        await handleSettingDownloadThread();
         break;
-      case 2:
-        handleSettingDownloadTimeout();
+      case "timeout":
+        await handleSettingDownloadTimeout();
         break;
-      case 3:
+      case "rename":
         config.download.autoRename = !config.download.autoRename;
         break;
-      case 4:
-        handleSettingProxy();
+      case "proxy":
+        await handleSettingProxy();
         break;
     }
 
     Pixiv.writeConfig(config);
-  } while (index !== -1);
+  }
 
-  console.log("Exit".green);
+  console.log("Settings saved.".green);
 }
 
 async function handleSettingDownloadPath(): Promise<void> {
@@ -404,63 +457,72 @@ async function handleSettingDownloadPath(): Promise<void> {
     ).value || initial;
 }
 
-function handleSettingDownloadThread(): void {
-  config.download.thread = getStrictIntInput(
-    "Please input the number of download thread:".yellow +
-      " [1-32, default is 5]\n",
-    { defaultInput: "5" },
-    (input: number) => input >= 1 && input <= 32,
-    "It must be between 1 and 32.",
-  );
-}
-
-function handleSettingDownloadTimeout(): void {
-  config.download.timeout = getStrictIntInput(
-    "Please input the seconds of download timeout:".yellow +
-      " [default is 30]\n",
-    { defaultInput: "30" },
-    (input: number) => input > 0,
-    "It must be greater than 0.",
-  );
-}
-
-function handleSettingProxy(): void {
-  config.proxy = readline.question(
-    "Please input your HTTP/SOCKS proxy like:\n".yellow +
-      "  <protocol>://[user:passwd@]<hostname>[:<port>]\n" +
-      "  <protocol> can be http(s) / socks(4|4a|5|5h) / pac+(http|https|ftp|file)\n" +
-      "Example\n".yellow +
-      "  http://127.0.0.1:1080\n" +
-      "  socks://127.0.0.1:7890\n" +
-      "If you input nothing, iroha will load proxy from environment variables if available.\n"
-        .yellow +
-      "If you want to fully DISABLE it, please input ".yellow +
-      "disable".red +
-      ".\n".yellow,
+async function handleSettingDownloadThread(): Promise<void> {
+  const { value } = await prompts(
     {
-      limitMessage: "\nIncorrect format, please re-input.\n".bgRed,
-      limit: checkProxy,
+      type: "number",
+      name: "value",
+      message: "Download threads (1-32):",
+      initial: config.download.thread || 5,
+      validate: (v) => (v >= 1 && v <= 32 ? true : "Must be between 1 and 32"),
     },
+    { onCancel },
   );
+
+  if (value !== undefined) {
+    config.download.thread = value;
+  }
 }
 
+async function handleSettingDownloadTimeout(): Promise<void> {
+  const { value } = await prompts(
+    {
+      type: "number",
+      name: "value",
+      message: "Download timeout (seconds):",
+      initial: config.download.timeout || 30,
+      validate: (v) => (v > 0 ? true : "Must be greater than 0"),
+    },
+    { onCancel },
+  );
+
+  if (value !== undefined) {
+    config.download.timeout = value;
+  }
+}
+
+async function handleSettingProxy(): Promise<void> {
+  const message =
+    "Please input your HTTP/SOCKS proxy like:\n".yellow +
+    "  <protocol>://[user:passwd@]<hostname>[:<port>]\n" +
+    "  <protocol> can be http(s) / socks(4|4a|5|5h) / pac+(http|https|ftp|file)\n" +
+    "Example\n".yellow +
+    "  http://127.0.0.1:1080\n" +
+    "  socks://127.0.0.1:7890\n" +
+    "If you input nothing, iroha will load proxy from environment variables if available.\n"
+      .yellow +
+    "If you want to fully DISABLE it, please input ".yellow +
+    "disable".red +
+    ".\n".yellow;
+
+  const response = await prompts(
+    {
+      type: "text",
+      name: "value",
+      message: message,
+      validate: (input: string) =>
+        checkProxy(input) ? true : "Incorrect format, please re-input.".bgRed,
+    },
+    { onCancel },
+  );
+
+  if (response.value !== undefined) {
+    config.proxy = response.value;
+  }
+}
 /* -------------------------------------------------------------------------- */
 /*  Utilities                                                                 */
 /* -------------------------------------------------------------------------- */
-
-function getStrictIntInput(
-  question: string,
-  option: readline.BasicOptions,
-  limit: (input: number) => boolean,
-  limitReply: string,
-): number {
-  let result = readline.questionInt(question, option);
-  while (!limit(result)) {
-    console.log("\n" + limitReply.bgRed + "\n");
-    result = readline.questionInt(question, option);
-  }
-  return result;
-}
 
 function help(): void {
   console.error("\nMissing arguments!".bgRed);

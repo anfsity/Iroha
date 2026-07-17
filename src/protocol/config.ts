@@ -8,16 +8,7 @@
 
 import fse from "fs-extra";
 import path from "node:path";
-import { homedir, platform } from "node:os";
-
-function getAppDataPath(appName: string): string {
-  const baseDir =
-    process.env.APPDATA ||
-    (platform() === "win32"
-      ? path.join(homedir(), "AppData", "Roaming")
-      : path.join(homedir(), ".config"));
-  return path.join(baseDir, appName);
-}
+import { getAppDataPath } from "../utils.js";
 
 const CONFIG_FILE_DIR = getAppDataPath("iroha");
 const CONFIG_FILE = path.resolve(CONFIG_FILE_DIR, "protocol.json");
