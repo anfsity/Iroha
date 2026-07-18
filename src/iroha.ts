@@ -15,24 +15,8 @@ import receiveLoginCode from "./protocol/receiver.js";
 import { Command } from "commander";
 import prompts from "prompts";
 import open from "open";
-import { createRequire } from "module";
+import pkg from "../package.json" with { type: "json" };
 import { getAppDataPath } from "./utils.js";
-
-/* -------------------------------------------------------------------------- */
-/*  Package metadata                                                          */
-/* -------------------------------------------------------------------------- */
-
-const require = createRequire(import.meta.url);
-const pkg: { version: string } = (() => {
-  try {
-    return require("../package.json");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "MODULE_NOT_FOUND") {
-      throw error;
-    }
-    return require("../../package.json");
-  }
-})();
 
 const onCancel = () => {
   console.log("\nOperation cancelled.".yellow);
