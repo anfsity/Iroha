@@ -26,13 +26,13 @@ jobs:
         run: bun build ./src/iroha.ts --compile --target=bun-windows-x64 --minify --outfile iroha-windows.exe
 
       - name: Upload to Release
-        uses: xresloader/upload-to-github-release@v1
+        uses: softprops/action-gh-release@v3
+        if: github.ref_type == 'tag'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          file: |
+          files: |
             iroha-linux-x64
             iroha-windows.exe
             README.md
-          tags: true
           draft: true
