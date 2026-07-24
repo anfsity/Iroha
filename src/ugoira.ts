@@ -2,9 +2,11 @@ import fse from "fs-extra";
 import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
+import { inflateRaw } from "node:zlib";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const inflateRawAsync = promisify(inflateRaw);
 const MAX_TOOL_OUTPUT = 2 * 1024 * 1024;
 
 export type UgoiraFormat = "zip" | "gif" | "both";
@@ -20,55 +22,11 @@ export function getUgoiraGifFilename(zipFilename: string): string {
   return zipFilename.replace(/\.zip$/i, ".gif");
 }
 
-function isMissingExecutable(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === "ENOENT"
-  );
-}
-
 async function runTool(command: string, args: string[]): Promise<void> {
   await execFileAsync(command, args, {
     maxBuffer: MAX_TOOL_OUTPUT,
     windowsHide: true,
   });
-}
-
-async function extractArchive(zipPath: string, outputDir: string): Promise<void> {
-  const candidates: [string, string[]][] =
-    process.platform === "win32"
-      ? [
-          ["tar", ["-xf", zipPath, "-C", outputDir]],
-          ["unzip", ["-q", "-o", zipPath, "-d", outputDir]],
-        ]
-      : [
-          ["unzip", ["-q", "-o", zipPath, "-d", outputDir]],
-          ["tar", ["-xf", zipPath, "-C", outputDir]],
-        ];
-
-  let lastError: unknown;
-  for (const [command, args] of candidates) {
-    try {
-      await runTool(command, args);
-      return;
-    } catch (error) {
-      lastError = error;
-      if (!isMissingExecutable(error)) {
-        throw new Error(
-          `Unable to extract ugoira ZIP with ${command}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    }
-  }
-
-  throw new Error(
-    "Ugoira GIF conversion requires unzip or tar to extract the downloaded ZIP",
-    { cause: lastError },
-  );
 }
 
 async function findImageConverter(): Promise<string> {
@@ -91,47 +49,186 @@ async function findImageConverter(): Promise<string> {
   );
 }
 
-async function collectFrameFiles(
-  directory: string,
-): Promise<Map<string, string>> {
-  const files = new Map<string, string>();
-  const entries = await fse.readdir(directory, { withFileTypes: true });
+interface ZipEntry {
+  name: string;
+  compressionMethod: number;
+  compressedSize: number;
+  uncompressedSize: number;
+  localHeaderOffset: number;
+}
 
-  for (const entry of entries) {
-    const entryPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      for (const [name, filePath] of await collectFrameFiles(entryPath)) {
-        files.set(name, filePath);
-      }
-    } else if (/\.(?:jpe?g|png|webp)$/i.test(entry.name)) {
-      files.set(entry.name, entryPath);
+interface FrameFile {
+  filePath: string;
+  delay: number;
+}
+
+const ZIP_END_OF_CENTRAL_DIRECTORY = 0x06054b50;
+const ZIP_CENTRAL_DIRECTORY_ENTRY = 0x02014b50;
+const ZIP_LOCAL_FILE_HEADER = 0x04034b50;
+
+function readUInt16(buffer: Buffer, offset: number): number {
+  if (offset < 0 || offset + 2 > buffer.length) {
+    throw new Error("Invalid ugoira ZIP metadata");
+  }
+  return buffer.readUInt16LE(offset);
+}
+
+function readUInt32(buffer: Buffer, offset: number): number {
+  if (offset < 0 || offset + 4 > buffer.length) {
+    throw new Error("Invalid ugoira ZIP metadata");
+  }
+  return buffer.readUInt32LE(offset);
+}
+
+function findEndOfCentralDirectory(buffer: Buffer): number {
+  const minimumOffset = Math.max(0, buffer.length - 0xffff - 22);
+  for (let offset = buffer.length - 22; offset >= minimumOffset; offset--) {
+    if (readUInt32(buffer, offset) === ZIP_END_OF_CENTRAL_DIRECTORY) {
+      return offset;
     }
   }
 
-  return files;
+  throw new Error("Invalid ugoira ZIP: central directory is missing");
 }
 
-async function getFrames(
-  directory: string,
-  metadata?: UgoiraFrame[],
-): Promise<{ filePath: string; delay: number }[]> {
-  const files = await collectFrameFiles(directory);
-  const frames = metadata?.length
-    ? metadata.map((frame) => ({
-        filePath: files.get(path.basename(frame.file)),
-        delay: frame.delay,
-      }))
-    : [...files.keys()]
-        .sort((left, right) =>
-          left.localeCompare(right, undefined, { numeric: true }),
-        )
-        .map((name) => ({ filePath: files.get(name), delay: 100 }));
+function readZipEntries(buffer: Buffer): ZipEntry[] {
+  const endOffset = findEndOfCentralDirectory(buffer);
+  const entryCount = readUInt16(buffer, endOffset + 10);
+  const centralDirectorySize = readUInt32(buffer, endOffset + 12);
+  const centralDirectoryOffset = readUInt32(buffer, endOffset + 16);
 
-  if (frames.some((frame) => !frame.filePath)) {
-    throw new Error("Ugoira ZIP is missing one or more metadata frames");
+  if (entryCount === 0xffff || centralDirectoryOffset === 0xffffffff) {
+    throw new Error("Ugoira ZIP64 archives are not supported");
   }
 
-  return frames as { filePath: string; delay: number }[];
+  if (
+    centralDirectoryOffset + centralDirectorySize > buffer.length ||
+    centralDirectoryOffset < 0
+  ) {
+    throw new Error("Invalid ugoira ZIP: central directory is out of bounds");
+  }
+
+  const entries: ZipEntry[] = [];
+  let offset = centralDirectoryOffset;
+  for (let index = 0; index < entryCount; index++) {
+    if (readUInt32(buffer, offset) !== ZIP_CENTRAL_DIRECTORY_ENTRY) {
+      throw new Error("Invalid ugoira ZIP: malformed central directory");
+    }
+
+    const nameLength = readUInt16(buffer, offset + 28);
+    const extraLength = readUInt16(buffer, offset + 30);
+    const commentLength = readUInt16(buffer, offset + 32);
+    const entryEnd = offset + 46 + nameLength + extraLength + commentLength;
+    if (entryEnd > buffer.length) {
+      throw new Error("Invalid ugoira ZIP: malformed central directory entry");
+    }
+
+    entries.push({
+      name: buffer
+        .subarray(offset + 46, offset + 46 + nameLength)
+        .toString("utf8"),
+      compressionMethod: readUInt16(buffer, offset + 10),
+      compressedSize: readUInt32(buffer, offset + 20),
+      uncompressedSize: readUInt32(buffer, offset + 24),
+      localHeaderOffset: readUInt32(buffer, offset + 42),
+    });
+
+    offset = entryEnd;
+  }
+
+  return entries;
+}
+
+function findFrameEntry(
+  entries: ZipEntry[],
+  frameName: string,
+): ZipEntry | undefined {
+  const normalizedName = frameName.replaceAll("\\", "/");
+  const exact = entries.find((entry) => entry.name === normalizedName);
+  if (exact) return exact;
+
+  const basename = path.posix.basename(normalizedName);
+  const matches = entries.filter(
+    (entry) => path.posix.basename(entry.name) === basename,
+  );
+  if (matches.length > 1) {
+    throw new Error(`Ugoira ZIP contains duplicate frame ${frameName}`);
+  }
+  return matches[0];
+}
+
+async function readZipEntry(buffer: Buffer, entry: ZipEntry): Promise<Buffer> {
+  const localOffset = entry.localHeaderOffset;
+  if (readUInt32(buffer, localOffset) !== ZIP_LOCAL_FILE_HEADER) {
+    throw new Error(`Invalid ugoira ZIP local header for ${entry.name}`);
+  }
+
+  const nameLength = readUInt16(buffer, localOffset + 26);
+  const extraLength = readUInt16(buffer, localOffset + 28);
+  const dataStart = localOffset + 30 + nameLength + extraLength;
+  const dataEnd = dataStart + entry.compressedSize;
+  if (dataEnd > buffer.length) {
+    throw new Error(`Ugoira ZIP frame is out of bounds: ${entry.name}`);
+  }
+
+  const compressed = buffer.subarray(dataStart, dataEnd);
+  let data: Buffer;
+  if (entry.compressionMethod === 0) {
+    data = compressed;
+  } else if (entry.compressionMethod === 8) {
+    data = await inflateRawAsync(compressed);
+  } else {
+    throw new Error(
+      `Unsupported ugoira ZIP compression method ${entry.compressionMethod}`,
+    );
+  }
+
+  if (
+    entry.uncompressedSize !== 0xffffffff &&
+    data.length !== entry.uncompressedSize
+  ) {
+    throw new Error(`Ugoira ZIP frame is incomplete: ${entry.name}`);
+  }
+  return data;
+}
+
+async function prepareFrames(
+  zipPath: string,
+  workDir: string,
+  metadata?: UgoiraFrame[],
+): Promise<FrameFile[]> {
+  const archive = await fse.readFile(zipPath);
+  const entries = readZipEntries(archive).filter((entry) =>
+    /\.(?:jpe?g|png|webp)$/i.test(entry.name),
+  );
+  const frameMetadata = metadata?.length
+    ? metadata.map((frame) => ({ name: frame.file, delay: frame.delay }))
+    : [...entries]
+        .sort((left, right) =>
+          left.name.localeCompare(right.name, undefined, { numeric: true }),
+        )
+        .map((entry) => ({ name: entry.name, delay: 100 }));
+
+  const frames: FrameFile[] = [];
+  for (const [index, frame] of frameMetadata.entries()) {
+    const entry = findFrameEntry(entries, frame.name);
+    if (!entry) {
+      throw new Error(`Ugoira ZIP is missing frame ${frame.name}`);
+    }
+
+    const extension = path.extname(path.posix.basename(entry.name)) || ".img";
+    const framePath = path.join(
+      workDir,
+      `${String(index).padStart(6, "0")}${extension}`,
+    );
+    await fse.writeFile(framePath, await readZipEntry(archive, entry));
+    frames.push({ filePath: framePath, delay: frame.delay });
+  }
+
+  if (frames.length === 0) {
+    throw new Error("Ugoira ZIP does not contain any image frames");
+  }
+  return frames;
 }
 
 export async function convertUgoiraToGif(
@@ -143,8 +240,7 @@ export async function convertUgoiraToGif(
   const temporaryGif = `${gifPath}.part`;
 
   try {
-    await extractArchive(zipPath, workDir);
-    const frames = await getFrames(workDir, metadata);
+    const frames = await prepareFrames(zipPath, workDir, metadata);
     const converter = await findImageConverter();
     const args: string[] = ["-dispose", "previous"];
 
@@ -152,7 +248,7 @@ export async function convertUgoiraToGif(
       args.push(
         "-delay",
         String(Math.max(1, Math.round(frame.delay / 10))),
-        frame.filePath!,
+        frame.filePath,
       );
     }
 
