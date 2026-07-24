@@ -6,9 +6,15 @@
 import fse from "fs-extra";
 import path from "node:path";
 import * as readline from "readline";
+import { createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
 import "colors";
 import { homedir, platform } from "node:os";
+
+export type DownloadOptions = AxiosRequestConfig & {
+  resume?: boolean;
+};
 
 export function getAppDataPath(appName: string): string {
   const baseDir =
@@ -37,35 +43,53 @@ export async function download(
   dirpath: string,
   filename: string,
   url: string,
-  axiosOption: AxiosRequestConfig = {},
+  axiosOption: DownloadOptions = {},
 ): Promise<AxiosResponse> {
   await fse.ensureDir(dirpath);
+  const { resume = true, ...requestOptions } = axiosOption;
+  const outputPath = path.join(dirpath, filename);
+  const existingSize =
+    resume && (await fse.pathExists(outputPath))
+      ? (await fse.stat(outputPath)).size
+      : 0;
   const controller = new AbortController();
+  const headers = {
+    ...(requestOptions.headers as Record<string, string> | undefined),
+  } as Record<string, string>;
+
+  if (existingSize > 0) {
+    headers.Range = `bytes=${existingSize}-`;
+  }
 
   const config: AxiosRequestConfig = {
-    ...axiosOption,
-    headers: { ...axiosOption.headers },
-    responseType: "arraybuffer",
+    ...requestOptions,
+    headers,
+    responseType: "stream",
     signal: controller.signal,
   };
 
   const finalUrl = new URL(url);
 
   // why should we use timeout * 2 ? since the axios timeout only applies to the response, not the connection.
-  let timeout: NodeJS.Timeout | null = axiosOption.timeout
+  let timeout: NodeJS.Timeout | null = requestOptions.timeout
     ? setTimeout(() => {
         controller.abort();
-      }, axiosOption.timeout * 2)
+      }, requestOptions.timeout * 2)
     : null;
 
   try {
     const res = await axios.get(finalUrl.href, config);
+    const append = existingSize > 0 && res.status === 206;
+    await pipeline(
+      res.data,
+      createWriteStream(outputPath, { flags: append ? "a" : "w" }),
+    );
+
     if (timeout) {
       clearTimeout(timeout);
       timeout = null;
     }
 
-    await fse.writeFile(path.join(dirpath, filename), res.data);
     return res;
   } catch (err: any) {
     if (timeout) {
@@ -96,7 +120,7 @@ export async function readJsonSafely<T>(
 }
 
 export class UgoiraDir {
-  private files: Set<string> = new Set();
+  private files: Map<string, string> = new Map();
   private dirpath: string;
   private initialized: boolean = false;
 
@@ -110,9 +134,9 @@ export class UgoiraDir {
     if (await fse.pathExists(this.dirpath)) {
       const allFiles = await fse.readdir(this.dirpath);
       const existingFiles = allFiles
-        .filter((file) => file.endsWith(".zip"))
-        .map((file) => this.normalizeFilename(file));
-      this.files = new Set(existingFiles);
+        .filter((file) => /\.zip$/i.test(file))
+        .map((file) => [this.normalizeFilename(file), file] as const);
+      this.files = new Map(existingFiles);
     }
     this.initialized = true;
   }
@@ -120,6 +144,11 @@ export class UgoiraDir {
   public async exists(file: string): Promise<boolean> {
     await this.init();
     return this.files.has(this.normalizeFilename(file));
+  }
+
+  public async find(file: string): Promise<string | undefined> {
+    await this.init();
+    return this.files.get(this.normalizeFilename(file));
   }
 
   private normalizeFilename(filename: string): string {

@@ -1,5 +1,7 @@
 这个项目起于我心血来潮（~~闲的没事干~~）从上游 [pxder](https://github.com/Tsuk1ko/pxder) ts 重写而来，修复了一些 bug (?)。
 
+目前需要手动在终端中导入代理，开 tun 是最方便的，~~有时间我完善一下~~
+
 ## 安装
 
 ### 从 release 下载
@@ -43,6 +45,7 @@ Options:
   -U, --update            update all illustrators' illusts in your download path
   -M, --no-ugoira-meta    will not request meta data for ugoira, it helps save time or
                            avoid API rate limit error when downloading a tons of ugoiras
+  --ugoira-format <format> output ugoira as zip, gif, or both (default: zip)
   -O, --output-dir <dir>  Specify download directory
   --debug                 output all error messages while running
   --output-config-dir     output the directory of config and exit
@@ -50,5 +53,11 @@ Options:
   -v, --version           output the version number
   -h, --help              display help for command
 ```
+
+`--ugoira-format gif` converts downloaded ugoira ZIP files to GIF and removes the
+ZIP after a successful conversion. Use `both` to keep the original ZIP. GIF
+conversion requires ImageMagick (`magick` or `convert`) and `unzip` or `tar`.
+
+## 该工具仅供个人学习研究和学习使用
 
 > 感谢 [pxder](https://github.com/Tsuk1ko/pxder) 所做的工作。

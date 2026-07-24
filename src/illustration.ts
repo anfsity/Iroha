@@ -12,6 +12,7 @@ interface IllustObject {
   title: string;
   url: string;
   file: string;
+  ugoiraFrames?: UgoiraFrame[];
 }
 
 let pixiv: PixivApi;
@@ -22,6 +23,7 @@ export class Illust {
     public title: string,
     public url: string,
     public file: string,
+    public ugoiraFrames?: UgoiraFrame[],
   ) {}
 
   static setPixiv(p: PixivApi): void {
@@ -29,12 +31,14 @@ export class Illust {
   }
 
   public getObject(): IllustObject {
-    return {
+    const object: IllustObject = {
       id: this.id,
       title: this.title,
       url: this.url,
       file: this.file,
     };
+    if (this.ugoiraFrames) object.ugoiraFrames = this.ugoiraFrames;
+    return object;
   }
 
   static async getIllusts(illustJSON: PixivIllustJSON): Promise<Illust[]> {
@@ -56,9 +60,16 @@ export class Illust {
       if (appState.ugoiraMeta) {
         try {
           const res = await pixiv.ugoiraMetaData(id);
-          const uDelay = res.ugoira_metadata.frames[0]!.delay;
+          const frames = res.ugoira_metadata.frames as UgoiraFrame[];
+          const uDelay = frames[0]?.delay ?? 100;
           illusts.push(
-            new Illust(id, title, zipUrl, `(${id})${fileName}@${uDelay}ms.zip`),
+            new Illust(
+              id,
+              title,
+              zipUrl,
+              `(${id})${fileName}@${uDelay}ms.zip`,
+              frames,
+            ),
           );
         } catch (error) {
           console.error(

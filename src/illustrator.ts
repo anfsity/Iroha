@@ -4,10 +4,12 @@
  */
 
 import "colors";
+import pLimit from "p-limit";
 import Illust from "./illustration.js";
 import PixivApi from "./pixiv-api-client.js";
 
 let pixiv: PixivApi;
+const illustMetadataLimit = pLimit(4);
 
 export class Illustrator {
   constructor(
@@ -24,7 +26,9 @@ export class Illustrator {
     this.exampleIllusts = [];
     // Network requests are sent in parallel only when requesting a ugoira.
     const results = await Promise.all(
-      pillustsJSON.map((json) => Illust.getIllusts(json)),
+      pillustsJSON.map((json) =>
+        illustMetadataLimit(() => Illust.getIllusts(json)),
+      ),
     );
     this.exampleIllusts = results.flat();
   }
@@ -53,7 +57,6 @@ export class Illustrator {
     type: string,
     option?: Record<string, any>,
   ): Promise<Illust[]> {
-    let result: Illust[] = [];
     let json: PixivIllustResponse;
 
     const nxtUrl = this.next[type];
@@ -70,12 +73,15 @@ export class Illustrator {
       }
     }
 
-    if (json.illusts) {
-      for (const illustJSON of json.illusts) {
-        const illustInstances = await Illust.getIllusts(illustJSON);
-        result = result.concat(illustInstances);
-      }
-    }
+    const result = json.illusts
+      ? (
+          await Promise.all(
+            json.illusts.map((illustJSON) =>
+              illustMetadataLimit(() => Illust.getIllusts(illustJSON)),
+            ),
+          )
+        ).flat()
+      : [];
 
     this.next[type] = json.next_url;
 

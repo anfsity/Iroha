@@ -17,6 +17,7 @@ import prompts from "prompts";
 import open from "open";
 import pkg from "../package.json" with { type: "json" };
 import { getAppDataPath } from "./utils.js";
+import { isUgoiraFormat } from "./ugoira.js";
 
 const onCancel = () => {
   console.log("\nOperation cancelled.".yellow);
@@ -68,6 +69,10 @@ program
   .option(
     "-M, --no-ugoira-meta",
     `will not request meta data for ugoira, it helps save time or${optionNewLine}avoid API rate limit error when downloading a tons of ugoiras`,
+  )
+  .option(
+    "--ugoira-format <format>",
+    "ugoira output format: zip, gif, or both (default: zip)",
   )
   .option("-O, --output-dir <dir>", "Specify download directory")
   .option("--debug", "output all error messages while running")
@@ -225,6 +230,13 @@ async function handleArgv(config: any): Promise<boolean> {
 
   appState.debug = !!opts.debug;
   appState.ugoiraMeta = !!opts.ugoiraMeta;
+  const ugoiraFormat = opts.ugoiraFormat ?? config.download.ugoiraFormat;
+  if (!isUgoiraFormat(ugoiraFormat)) {
+    throw new Error(
+      `Invalid ugoira format "${String(ugoiraFormat)}"; expected zip, gif, or both`,
+    );
+  }
+  appState.ugoiraFormat = ugoiraFormat;
 
   // Clean up stale protocol registration (Windows only)
   if (process.platform === "win32" && (await LoginProtocol.exists())) {
@@ -388,6 +400,10 @@ async function handleSettings(config: any): Promise<void> {
         value: "rename",
       },
       {
+        title: `Ugoira output: `.yellow + config.download.ugoiraFormat,
+        value: "ugoiraFormat",
+      },
+      {
         title: `Proxy: `.yellow + (config.proxy || "From env vars"),
         value: "proxy",
       },
@@ -418,6 +434,9 @@ async function handleSettings(config: any): Promise<void> {
         break;
       case "rename":
         config.download.autoRename = !config.download.autoRename;
+        break;
+      case "ugoiraFormat":
+        await handleSettingUgoiraFormat(config);
         break;
       case "proxy":
         await handleSettingProxy(config);
@@ -475,6 +494,29 @@ async function handleSettingDownloadTimeout(config: any): Promise<void> {
 
   if (value !== undefined) {
     config.download.timeout = value;
+  }
+}
+
+async function handleSettingUgoiraFormat(config: any): Promise<void> {
+  const { value } = await prompts(
+    {
+      type: "select",
+      name: "value",
+      message: "Ugoira output format:",
+      choices: [
+        { title: "ZIP only", value: "zip" },
+        { title: "GIF only", value: "gif" },
+        { title: "GIF and ZIP", value: "both" },
+      ],
+      initial: ["zip", "gif", "both"].indexOf(
+        config.download.ugoiraFormat,
+      ),
+    },
+    { onCancel },
+  );
+
+  if (isUgoiraFormat(value)) {
+    config.download.ugoiraFormat = value;
   }
 }
 

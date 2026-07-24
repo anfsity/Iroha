@@ -28,6 +28,7 @@ const defaultConfig: AppConfig = {
   download: {
     thread: 5,
     timeout: 30,
+    ugoiraFormat: "zip",
   },
 } as const;
 
@@ -101,7 +102,15 @@ export default class Pixiv {
   static async applyProxyConfig(config?: AppConfig): Promise<void> {
     const targetConfig = config || (await this.readConfig());
     const agent = getProxyAgent(targetConfig.proxy);
-    delSysProxy();
+
+    // ProxyAgent reads environment variables when a request is made. Keep
+    // them available when no explicit proxy is configured.
+    const useSystemProxy =
+      targetConfig.proxy === "" ||
+      targetConfig.proxy === undefined ||
+      targetConfig.proxy === null;
+    if (!useSystemProxy) delSysProxy();
+
     if (agent) {
       Downloader.setAgent(agent);
       PixivApi.setAgent(agent);
@@ -323,22 +332,14 @@ export default class Pixiv {
     const dirPath = path.join(__config.download.path, "PID");
     await fse.ensureDir(dirPath);
 
-    const files = await fse.readdir(dirPath);
-    const exists = files
-      .map((file) => {
-        const search = /^\(([0-9]+)\)/.exec(file);
-        if (search && search[1]) return search[1];
-        return null;
-      })
-      .filter((pid): pid is string => pid !== null);
-
     for (const pid of pids) {
-      if (exists.includes(pid)) continue;
+      const normalizedPid = pid.trim();
+      if (!normalizedPid) continue;
       try {
-        const json = await this.pixiv.illustDetail(pid);
+        const json = await this.pixiv.illustDetail(normalizedPid);
         jsons.push(json.illust);
       } catch (error) {
-        console.log(`${pid} does not exist`.gray);
+        console.log(`${normalizedPid} does not exist`.gray);
       }
     }
     await Downloader.downloadByIllusts(jsons);

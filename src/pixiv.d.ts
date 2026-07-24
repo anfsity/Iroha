@@ -1,7 +1,12 @@
 interface PixivUgoiraMeta {
   ugoira_metadata: {
-    frames: { delay: number }[];
+    frames: UgoiraFrame[];
   };
+}
+
+interface UgoiraFrame {
+  file: string;
+  delay: number;
 }
 
 interface UserData {
@@ -16,6 +21,7 @@ interface DownloadConfig {
   path?: string;
   tmp?: string;
   autoRename?: boolean;
+  ugoiraFormat?: "zip" | "gif" | "both";
 }
 
 interface PixivIllustResponse {
@@ -37,5 +43,4 @@ interface PixivIllustJSON {
     };
   }[];
 }
-
 
