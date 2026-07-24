@@ -1,6 +1,6 @@
 这个项目起于我心血来潮（~~闲的没事干~~）从上游 [pxder](https://github.com/Tsuk1ko/pxder) ts 重写而来，修复了一些 bug (?)。
 
-目前需要手动在终端中导入代理，开 tun 是最方便的，~~有时间我完善一下~~
+目前需要手动在终端中导入代理或者手动填入代理给 iroha，开 tun 是最方便的。
 
 ## 安装
 
@@ -47,17 +47,27 @@ Options:
                            avoid API rate limit error when downloading a tons of ugoiras
   --ugoira-format <format> output ugoira as zip, gif, or both (default: zip)
   -O, --output-dir <dir>  Specify download directory
-  --debug                 output all error messages while running
+  --debug                 enable debug logs
+  --log-level <level>     log level: trace, debug, info, warn, error, or fatal
+  --log-format <format>   terminal log format: human or jsonl
+  --log-file <path>       write structured JSONL logs to a file
   --output-config-dir     output the directory of config and exit
   --export-token          output current refresh token and exit
   -v, --version           output the version number
   -h, --help              display help for command
 ```
 
-`--ugoira-format gif` converts downloaded ugoira ZIP files to GIF and removes the
-ZIP after a successful conversion. Use `both` to keep the original ZIP. GIF
-conversion requires ImageMagick (`magick` or `convert`) and `unzip` or `tar`.
+目前来说转化成 gif 需要依赖 Imagemagick，这个需要手动安装。
 
-## 该工具仅供个人学习研究和学习使用
+## 日志
+
+日志记录包含时间、级别、scope、event、message、stack、context 和异步关联信息。默认输出可读日志，排查问题时可以提高日志级别并保存 JSONL：
+
+```bash
+iroha --debug --log-file ./iroha.log -p 123456
+iroha --log-level trace --log-format jsonl --log-file ./iroha.jsonl -p 123456
+```
+
+## 该工具仅供个人研究和学习使用
 
 > 感谢 [pxder](https://github.com/Tsuk1ko/pxder) 所做的工作。
