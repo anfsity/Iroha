@@ -160,113 +160,110 @@ export async function downloadIllusts(
   totalThread: number,
 ): Promise<any[]> {
   const tempDir = config.tmp!;
-  let totalI = 0; //< total illustrations
 
-  if (fse.existsSync(tempDir)) fse.removeSync(tempDir);
-  fse.ensureDirSync(dldir);
+  await fse.emptyDir(tempDir);
+  await fse.ensureDir(dldir);
 
-  let errorThread = 0;
-  let pause = false;
   const hangup = 5 * 60 * 1000;
-  let errorTimeout: NodeJS.Timeout | null = null;
+  const max_retries = 10;
+  let pause = false;
+  let continuousErr = 0;
 
-  const singleThread = async (threadID: number) => {
-    while (true) {
-      const i = totalI++;
-      if (i >= illusts.length) return threadID;
+  const downloadOne = async (
+    illust: Illust,
+    threadID: number,
+    i: number,
+  ): Promise<void> => {
+    const logPrefix = `[${threadID}]\t${(i + 1).toString().green}/${illusts.length}\t ${"pid".gray} ${illust.id.toString().cyan}\t`;
 
-      const illust = illusts[i];
-      if (!illust) continue;
-      const options: any = {
-        headers: { referer: pixivRefer },
-        timeout: 1000 * config.timeout,
-      };
+    const options = {
+      headers: { referer: pixivRefer },
+      timeout: 1000 * config.timeout,
+      httpsAgent: httpsAgent || undefined,
+    };
 
-      if (httpsAgent) options.httpsAgent = httpsAgent;
+    for (let attempt = 1; attempt <= max_retries; ++attempt) {
+      if (pause) {
+        await sleep(1000);
+        attempt--;
+        continue;
+      }
 
-      console.log(
-        `  [${threadID}]\t${(i + 1).toString().green}/${illusts.length}\t ${"pid".gray} ${illust.id.toString().cyan}\t${illust.title.yellow}`,
-      );
+      try {
+        const dlFile = path.join(tempDir, illust.file);
+        const finalFile = path.join(dldir, illust.file);
 
-      // FIXME: emmm, this code is a complete mess, we need to tidy it up ...
-      const tryDownload = async (times: number): Promise<void> => {
-        if (times > 10) {
-          if (errorThread > 1) {
-            if (errorTimeout) clearTimeout(errorTimeout);
-            errorTimeout = setTimeout(() => {
-              console.log("\n" + "Network error! Pause 5 minutes.".red + "\n");
-            }, 1000);
+        const res = await utils.download(
+          tempDir,
+          illust.file,
+          illust.url,
+          options,
+        );
+
+        const expectedSize = res.headers["content-length"];
+        const stats = await fse.stat(dlFile);
+
+        if (expectedSize && stats.size.toString() !== expectedSize.toString()) {
+          await fse.remove(dlFile);
+          throw new Error(`Incomplete: ${stats.size}/${expectedSize}`);
+        }
+
+        await fse.move(dlFile, finalFile, { overwrite: true });
+
+        if (continuousErr > 0) continuousErr = 0;
+        console.log(`${logPrefix}${illust.title.yellow}`);
+
+        return;
+      } catch (err: any) {
+        if (err?.response?.status === 404) {
+          console.log(`${"404".bgRed}\t${logPrefix}${illust.title.yellow}`);
+          return;
+        }
+
+        continuousErr++;
+
+        const isLastAttempt = attempt === max_retries;
+        const colorLabel = isLastAttempt
+          ? "[ERROR]".bgRed
+          : `[Retry ${attempt}]`.bgYellow;
+        console.log(
+          `${colorLabel}${logPrefix}${err.message || "Unknown Error"}`,
+        );
+
+        if (continuousErr > totalThread * 2) {
+          if (!pause) {
             pause = true;
-          } else return;
-        }
-
-        if (pause) {
-          times = 1;
-          await sleep(hangup);
-          pause = false;
-        }
-
-        try {
-          const res = await utils.download(
-            tempDir,
-            illust.file,
-            illust.url,
-            options,
-          );
-
-          const fileSize = res.headers["content-length"];
-          const dlFile = path.join(tempDir, illust.file);
-
-          // FIXME: maybe we should fix this bug, let me figure it out. Theoretically, there shouldnt be any sleep here
-          await sleep(1000);
-
-          for (let j = 0; j < 15 && !fse.existsSync(dlFile); j++)
-            await sleep(200);
-
-          const dlFileSize = fse.statSync(dlFile).size;
-          if (!fileSize || dlFileSize.toString() === fileSize.toString()) {
-            fse.moveSync(dlFile, path.join(dldir, illust.file), {
-              overwrite: true,
-            });
-          } else {
-            fse.unlinkSync(dlFile);
-            throw new Error(`Incomplete download ${dlFileSize}/${fileSize}`);
-          }
-          if (times !== 1) errorThread--;
-        } catch (e: any) {
-          if (e?.response?.status === 404) {
             console.log(
-              `  ${"404".bgRed}\t${(i + 1).toString().green}/${illusts.length}\t ${"pid".gray} ${illust.id.toString().cyan}\t${illust.title.yellow}`,
+              `\n${"Network unstable. Pausing for 5 minutes...".red}\n`,
             );
-            return;
+            setTimeout(() => {
+              pause = false;
+              continuousErr = 0;
+            }, hangup);
           }
-
-          if (times === 1) errorThread++;
-          if (appState.debug) console.error(e);
-
-          console.log(
-            `  ${times >= 10 ? `[${threadID}]`.bgRed : `[${threadID}]`.bgYellow}\t` +
-              `${(i + 1).toString().green}/${illusts.length}\t ${"pid".gray} ` +
-              `${illust.id.toString().cyan}\t${illust.title.yellow}`,
-          );
-          return tryDownload(times + 1);
         }
-      };
 
-      await tryDownload(1);
+        if (isLastAttempt) return;
+        await sleep(2000 * attempt);
+      }
     }
   };
 
-  const threads = [];
-  for (let t = 0; t < totalThread; t++) {
-    threads.push(
-      singleThread(t).catch((e) => {
-        if (appState.debug) console.error(e);
-      }),
-    );
-  }
+  let idx = 0;
+  const worker = async (threadID: number) => {
+    while (idx < illusts.length) {
+      const i = idx++;
+      const illust = illusts[i];
+      if (illust) {
+        await downloadOne(illust, threadID, i);
+      }
+    }
+  };
 
-  return Promise.all(threads);
+  const threads = Array.from({ length: totalThread }, (_, i) => worker(i));
+  await Promise.all(threads);
+
+  return [];
 }
 
 async function getIllustratorNewDir(data: {
