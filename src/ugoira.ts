@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { inflateRaw } from "node:zlib";
 import { promisify } from "node:util";
+import logger from "./logger.js";
 
 const execFileAsync = promisify(execFile);
 const inflateRawAsync = promisify(inflateRaw);
@@ -238,6 +239,13 @@ export async function convertUgoiraToGif(
 ): Promise<void> {
   const workDir = await fse.mkdtemp(path.join(os.tmpdir(), "iroha-ugoira-"));
   const temporaryGif = `${gifPath}.part`;
+  const operationId = logger.createOperationId("ugoira");
+  const startedAt = Date.now();
+
+  logger.debug("ugoira", "converter.started", "ImageMagick conversion started", {
+    context: { zipPath, gifPath, metadataFrames: metadata?.length ?? null },
+    async: { operationId, phase: "running" },
+  });
 
   try {
     const frames = await prepareFrames(zipPath, workDir, metadata);
@@ -261,6 +269,25 @@ export async function convertUgoiraToGif(
 
     await fse.ensureDir(path.dirname(gifPath));
     await fse.move(temporaryGif, gifPath, { overwrite: true });
+    logger.debug("ugoira", "converter.succeeded", "ImageMagick conversion completed", {
+      context: { zipPath, gifPath, durationMs: Date.now() - startedAt },
+      async: {
+        operationId,
+        phase: "success",
+        durationMs: Date.now() - startedAt,
+      },
+    });
+  } catch (error) {
+    logger.debug("ugoira", "converter.failed", "ImageMagick conversion failed", {
+      context: { zipPath, gifPath, durationMs: Date.now() - startedAt },
+      async: {
+        operationId,
+        phase: "failed",
+        durationMs: Date.now() - startedAt,
+      },
+      error,
+    });
+    throw error;
   } finally {
     await fse.remove(temporaryGif);
     await fse.remove(workDir);

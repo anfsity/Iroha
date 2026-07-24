@@ -3,9 +3,9 @@
  * Original file: src/illust.js
  */
 
-import "colors";
 import type PixivApi from "./pixiv-api-client.js";
 import appState from "./appState.js";
+import logger from "./logger.js";
 
 interface IllustObject {
   id: number | string;
@@ -72,12 +72,17 @@ export class Illust {
             ),
           );
         } catch (error) {
-          console.error(
-            "\nFailed to get ugoira meta data. If you get a rate limit error, please use ",
-            "--no-ugoira-meta".yellow,
-            "argument to avoid it.",
-            error,
-            "\n",
+          logger.warn(
+            "ugoira",
+            "metadata.failed",
+            "Failed to get ugoira metadata; continuing without frame metadata",
+            {
+              context: {
+                pid: id,
+                command: "--no-ugoira-meta",
+              },
+              error,
+            },
           );
 
           illusts.push(new Illust(id, title, zipUrl, `(${id})${fileName}.zip`));

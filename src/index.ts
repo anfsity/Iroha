@@ -3,7 +3,6 @@
  * Original file: src/index.js
  */
 
-import "colors";
 import fse from "fs-extra";
 import path from "node:path";
 
@@ -14,6 +13,7 @@ import * as Downloader from "./downloader.js";
 import Illust from "./illustration.js";
 import Illustrator from "./illustrator.js";
 import appState from "./appState.js";
+import logger from "./logger.js";
 
 const CONFIG_FILE_DIR: string = utils.getAppDataPath("iroha");
 const CONFIG_FILE = path.resolve(CONFIG_FILE_DIR, "config.json");
@@ -74,18 +74,23 @@ export default class Pixiv {
     const targetConfig = config || (await this.readConfig());
     let check: boolean = true;
     if (!targetConfig.refresh_token) {
-      console.error(
-        "\nYou must login first!".red + "\n Try " + "iroha --login".yellow,
+      logger.error(
+        "config",
+        "auth.refresh_token.missing",
+        "You must login first",
+        { context: { command: "iroha --login" } },
       );
       check = false;
     }
 
     if (!targetConfig.download.path) {
-      console.error(
-        "\nYou must set download path first!".red +
-          "\n Try " +
-          "iroha --setting".yellow,
+      logger.error(
+        "config",
+        "download.path.missing",
+        "You must set a download path first",
+        { context: { command: "iroha --setting" } },
       );
+      check = false;
     }
 
     return check;
@@ -148,7 +153,9 @@ export default class Pixiv {
       Illustrator.setPixiv(this.pixiv);
       Illust.setPixiv(this.pixiv);
     } catch (err: any) {
-      console.error("Initial Pixiv login refresh failed".red, err);
+      logger.error("auth", "refresh.failed", "Initial Pixiv login refresh failed", {
+        error: err,
+      });
       return false;
     }
 
@@ -156,12 +163,14 @@ export default class Pixiv {
       try {
         if (this.pixiv) {
           await this.pixiv.refreshAccessToken(refresh_token);
-          console.log("Automatic renewal successful.".green);
+          logger.info("auth", "refresh.succeeded", "Automatic token renewal succeeded");
         }
       } catch (err: any) {
-        console.error(
-          "Automatic renewal failed; a retry will be attempted next time:".red,
-          err,
+        logger.warn(
+          "auth",
+          "refresh.retry_scheduled",
+          "Automatic renewal failed; a retry will be attempted next time",
+          { error: err },
         );
       } finally {
         if (this.reloginInterval) {
@@ -238,9 +247,14 @@ export default class Pixiv {
   async downloadByUIDs(uids: string | string[]): Promise<void> {
     const uidArray = Array.isArray(uids) ? uids : [uids];
     for (const uid of uidArray) {
-      await Downloader.downloadByIllustrators([new Illustrator(uid)]).catch(
-        utils.logError,
-      );
+      try {
+        await Downloader.downloadByIllustrators([new Illustrator(uid)]);
+      } catch (error) {
+        logger.error("downloader", "illustrator.failed", "Illustrator download failed", {
+          context: { uid },
+          error,
+        });
+      }
     }
   }
 
@@ -268,7 +282,12 @@ export default class Pixiv {
       force ||
       (tmpJsonExist && !(follows = await utils.readJsonSafely(tmpJson, null)))
     ) {
-      console.log("\nCollecting your follows");
+      logger.info(
+        "pixiv",
+        "follows.collection_started",
+        "Collecting followed illustrators",
+        { context: { private: isPrivate } },
+      );
       follows = [];
       const ret = await this.getAllMyFollow(isPrivate);
       illustrators = ret;
@@ -339,7 +358,10 @@ export default class Pixiv {
         const json = await this.pixiv.illustDetail(normalizedPid);
         jsons.push(json.illust);
       } catch (error) {
-        console.log(`${normalizedPid} does not exist`.gray);
+        logger.warn("pixiv", "illust.not_found", "Illustration does not exist", {
+          context: { pid: normalizedPid },
+          error,
+        });
       }
     }
     await Downloader.downloadByIllusts(jsons);

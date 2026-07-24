@@ -3,7 +3,6 @@
  * Original file: src/downloader.js
  */
 
-import "colors";
 import fse from "fs-extra";
 import path from "node:path";
 import pLimit from "p-limit";
@@ -13,6 +12,7 @@ import Illust from "./illustration.js";
 import Illustrator from "./illustrator.js";
 import appState from "./appState.js";
 import { convertUgoiraToGif, getUgoiraGifFilename } from "./ugoira.js";
+import logger from "./logger.js";
 
 const pixivRefer = "https://www.pixiv.net/";
 
@@ -27,6 +27,20 @@ const illustMetadataLimit = pLimit(4);
 
 function isUgoira(illust: Illust): boolean {
   return illust.file.toLowerCase().endsWith(".zip");
+}
+
+function getIllustContext(illust: Illust): Record<string, unknown> {
+  return {
+    pid: illust.id,
+    title: illust.title,
+    filename: illust.file,
+    url: illust.url,
+    ugoira: isUgoira(illust),
+  };
+}
+
+function getTaskId(illust: Illust): string {
+  return `illust-${illust.id}-${illust.file}`;
 }
 
 async function hasExpectedOutput(
@@ -81,12 +95,52 @@ async function finalizeUgoira(
 
   const gifPath = path.join(dldir, getUgoiraGifFilename(illust.file));
   if (!(await fse.pathExists(gifPath))) {
+    const operationId = logger.createOperationId("ugoira-convert");
+    const startedAt = Date.now();
+    logger.info("ugoira", "conversion.started", "Ugoira GIF conversion started", {
+      context: { ...getIllustContext(illust), zipPath, gifPath },
+      async: {
+        operationId,
+        taskId: getTaskId(illust),
+        phase: "running",
+      },
+    });
     try {
       await convertUgoiraToGif(zipPath, gifPath, illust.ugoiraFrames);
+      logger.info("ugoira", "conversion.succeeded", "Ugoira GIF conversion succeeded", {
+        context: {
+          ...getIllustContext(illust),
+          zipPath,
+          gifPath,
+          durationMs: Date.now() - startedAt,
+        },
+        async: {
+          operationId,
+          taskId: getTaskId(illust),
+          phase: "success",
+          durationMs: Date.now() - startedAt,
+        },
+      });
     } catch (error) {
-      console.error(
-        `GIF conversion failed for pid ${illust.id}; ZIP was kept.`,
-        error instanceof Error ? error.message : error,
+      logger.error(
+        "ugoira",
+        "conversion.failed",
+        "GIF conversion failed; ZIP was kept",
+        {
+          context: {
+            ...getIllustContext(illust),
+            zipPath,
+            gifPath,
+            durationMs: Date.now() - startedAt,
+          },
+          async: {
+            operationId,
+            taskId: getTaskId(illust),
+            phase: "failed",
+            durationMs: Date.now() - startedAt,
+          },
+          error,
+        },
       );
       return false;
     }
@@ -94,6 +148,10 @@ async function finalizeUgoira(
 
   if (appState.ugoiraFormat === "gif") {
     await fse.remove(zipPath);
+    logger.debug("ugoira", "archive.removed", "Removed ZIP after GIF conversion", {
+      context: { ...getIllustContext(illust), zipPath },
+      async: { taskId: getTaskId(illust), phase: "success" },
+    });
   }
   return true;
 }
@@ -118,19 +176,30 @@ export async function downloadByIllustrators(
     try {
       illustratorInfo = await illustrator.info();
     } catch (err: any) {
-      if (err instanceof Error) {
-        console.log(err);
-      } else {
-        console.log(
-          `\nIllustrator ${"uid ".gray}${illustrator.id.toString().cyan} may have left pixiv or does not exist.`,
-        );
-      }
+      logger.warn(
+        "downloader",
+        "illustrator.info_failed",
+        "Unable to load illustrator information",
+        {
+          context: { uid: illustrator.id },
+          error: err,
+        },
+      );
       continue;
     }
 
-    console.log(
-      `\nCollecting illusts of ${(i + 1).toString().green}/${illustrators.length} ` +
-        `${"uid ".gray}${illustrator.id.toString().cyan} ${illustrator.name.yellow}`,
+    logger.info(
+      "downloader",
+      "illustrator.collection_started",
+      "Collecting illustrator illustrations",
+      {
+        context: {
+          uid: illustrator.id,
+          name: illustrator.name,
+          index: i + 1,
+          total: illustrators.length,
+        },
+      },
     );
 
     const info = await getDownloadListByIllustrator(
@@ -211,8 +280,13 @@ export async function downloadByBookmark(
   const illustExists = async (illust: Illust) =>
     hasExpectedOutput(illust, dldir, ugoiraDir);
 
-  console.log(
-    `\nCollecting illusts of your bookmark (${isPrivate ? "Private" : "Public"})`,
+  logger.info(
+    "downloader",
+    "bookmark.collection_started",
+    "Collecting bookmarked illustrations",
+    {
+      context: { private: isPrivate },
+    },
   );
 
   const illusts: Illust[] = [];
@@ -254,15 +328,43 @@ export async function downloadIllusts(
     threadID: number,
     i: number,
   ): Promise<void> => {
-    const logPrefix = `[${threadID}]\t${(i + 1).toString().green}/${illusts.length}\t ${"pid".gray} ${illust.id.toString().cyan}\t`;
     const dlFile = path.join(tempDir, illust.file);
     const finalFile = path.join(dldir, illust.file);
+    const taskId = getTaskId(illust);
+    const operationId = logger.createOperationId("download");
+    const taskStartedAt = Date.now();
+    const taskContext = {
+      ...getIllustContext(illust),
+      index: i + 1,
+      total: illusts.length,
+      workerId: String(threadID),
+      destination: dldir,
+    };
+
+    logger.info("downloader", "download.queued", "Illustration queued for download", {
+      context: taskContext,
+      async: {
+        operationId,
+        taskId,
+        workerId: String(threadID),
+        phase: "queued",
+      },
+    });
 
     // A ZIP may already be complete while its requested GIF output is not.
     // Convert it in place instead of downloading the archive again.
     if (isUgoira(illust) && appState.ugoiraFormat !== "zip") {
       const existingZip = await findExistingUgoiraZip(illust, dldir);
       if (existingZip) {
+        logger.info(
+          "downloader",
+          "download.existing_archive",
+          "Using an existing ugoira ZIP",
+          {
+            context: { ...taskContext, existingZip },
+            async: { operationId, taskId, workerId: String(threadID), phase: "running" },
+          },
+        );
         await finalizeUgoira(illust, path.join(dldir, existingZip), dldir);
         return;
       }
@@ -276,16 +378,64 @@ export async function downloadIllusts(
     };
 
     for (let attempt = 1; attempt <= max_retries; ++attempt) {
+      let waitedForPause = false;
       while (pause) {
+        if (!waitedForPause) {
+          logger.debug(
+            "downloader",
+            "download.waiting",
+            "Download paused because the network is unstable",
+            {
+              context: { ...taskContext, attempt },
+              async: {
+                operationId,
+                taskId,
+                workerId: String(threadID),
+                attempt,
+                phase: "waiting",
+              },
+            },
+          );
+          waitedForPause = true;
+        }
         await sleep(1000);
       }
+
+      const attemptStartedAt = Date.now();
+      logger.debug(
+        "downloader",
+        "download.attempt_started",
+        "Download attempt started",
+        {
+          context: { ...taskContext, attempt },
+          async: {
+            operationId,
+            taskId,
+            workerId: String(threadID),
+            attempt,
+            phase: "running",
+          },
+        },
+      );
 
       try {
         const res = await utils.download(
           tempDir,
           illust.file,
           illust.url,
-          options,
+          {
+            ...options,
+            log: {
+              context: { pid: illust.id, filename: illust.file, attempt },
+              async: {
+                operationId,
+                taskId,
+                workerId: String(threadID),
+                attempt,
+                phase: "running",
+              },
+            },
+          },
         );
 
         const contentRange = res.headers["content-range"];
@@ -316,7 +466,29 @@ export async function downloadIllusts(
         if (!(await finalizeUgoira(illust, finalFile, dldir))) return;
 
         if (continuousErr > 0) continuousErr = 0;
-        console.log(`${logPrefix}${illust.title.yellow}`);
+        logger.info(
+          "downloader",
+          "download.succeeded",
+          "Illustration downloaded successfully",
+          {
+            context: {
+              ...taskContext,
+              attempt,
+              status: res.status,
+              bytes: stats.size,
+              durationMs: Date.now() - taskStartedAt,
+              attemptDurationMs: Date.now() - attemptStartedAt,
+            },
+            async: {
+              operationId,
+              taskId,
+              workerId: String(threadID),
+              attempt,
+              phase: "success",
+              durationMs: Date.now() - taskStartedAt,
+            },
+          },
+        );
 
         return;
       } catch (err: any) {
@@ -331,35 +503,120 @@ export async function downloadIllusts(
           if (partial?.size === rangeTotal) {
             await fse.move(dlFile, finalFile, { overwrite: true });
             if (!(await finalizeUgoira(illust, finalFile, dldir))) return;
-            console.log(`${logPrefix}${illust.title.yellow}`);
+            logger.info(
+              "downloader",
+              "download.succeeded",
+              "Illustration download resumed after an already-complete range",
+              {
+                context: {
+                  ...taskContext,
+                  attempt,
+                  status: 206,
+                  bytes: partial.size,
+                  durationMs: Date.now() - taskStartedAt,
+                  attemptDurationMs: Date.now() - attemptStartedAt,
+                },
+                async: {
+                  operationId,
+                  taskId,
+                  workerId: String(threadID),
+                  attempt,
+                  phase: "success",
+                  durationMs: Date.now() - taskStartedAt,
+                },
+              },
+            );
             return;
           }
         }
 
         if (err?.response?.status === 404) {
-          console.log(`${"404".bgRed}\t${logPrefix}${illust.title.yellow}`);
+          logger.warn(
+            "downloader",
+            "download.not_found",
+            "Illustration returned HTTP 404",
+            {
+              context: {
+                ...taskContext,
+                attempt,
+                status: 404,
+                durationMs: Date.now() - attemptStartedAt,
+              },
+              async: {
+                operationId,
+                taskId,
+                workerId: String(threadID),
+                attempt,
+                phase: "failed",
+              },
+              error: err,
+            },
+          );
           return;
         }
 
         continuousErr++;
 
         const isLastAttempt = attempt === max_retries;
-        const colorLabel = isLastAttempt
-          ? "[ERROR]".bgRed
-          : `[Retry ${attempt}]`.bgYellow;
-        console.log(
-          `${colorLabel}${logPrefix}${err.message || "Unknown Error"}`,
-        );
+        const logOptions = {
+          context: {
+            ...taskContext,
+            attempt,
+            status: err?.response?.status,
+            code: err?.code,
+            continuousErrors: continuousErr,
+            durationMs: Date.now() - attemptStartedAt,
+          },
+          async: {
+            operationId,
+            taskId,
+            workerId: String(threadID),
+            attempt,
+            phase: isLastAttempt ? ("failed" as const) : ("retrying" as const),
+          },
+          error: err,
+        };
+        if (isLastAttempt) {
+          logger.error(
+            "downloader",
+            "download.failed",
+            "Illustration download failed after all retries",
+            logOptions,
+          );
+        } else {
+          logger.warn(
+            "downloader",
+            "download.retrying",
+            "Illustration download failed; retrying",
+            logOptions,
+          );
+        }
 
         if (continuousErr > totalThread * 2) {
           if (!pause) {
             pause = true;
-            console.log(
-              `\n${"Network unstable. Pausing for 5 minutes...".red}\n`,
+            logger.warn(
+              "downloader",
+              "network.paused",
+              "Network unstable; pausing downloads for five minutes",
+              {
+                context: {
+                  totalThread,
+                  continuousErrors: continuousErr,
+                  hangupMs: hangup,
+                },
+                async: { operationId, taskId, workerId: String(threadID), phase: "waiting" },
+              },
             );
             setTimeout(() => {
               pause = false;
               continuousErr = 0;
+              logger.info(
+                "downloader",
+                "network.resumed",
+                "Download pause ended; retrying network operations",
+                { context: { hangupMs: hangup } },
+              );
             }, hangup);
           }
         }
@@ -419,18 +676,15 @@ async function getIllustratorNewDir(data: {
   ) {
     try {
       await fse.rename(path.join(mainDir, dldir), path.join(mainDir, dldirNew));
-      console.log(
-        "\nDirectory renamed: %s => %s",
-        dldir.yellow,
-        dldirNew.green,
-      );
+      logger.info("downloader", "directory.renamed", "Download directory renamed", {
+        context: { from: dldir, to: dldirNew },
+      });
       dldir = dldirNew;
     } catch (err) {
-      console.log(
-        "\nDirectory rename failed: %s => %s",
-        dldir.yellow,
-        dldirNew.red,
-      );
+      logger.warn("downloader", "directory.rename_failed", "Download directory rename failed", {
+        context: { from: dldir, to: dldirNew },
+        error: err,
+      });
     }
   }
 
@@ -438,7 +692,9 @@ async function getIllustratorNewDir(data: {
 }
 
 export async function downloadByIllusts(illustJSON: any[]): Promise<void> {
-  console.log();
+  logger.info("downloader", "metadata.collection_started", "Collecting illustration metadata", {
+    context: { count: illustJSON.length },
+  });
   // Network requests are sent in parallel only when requesting a ugoira.
   const results = await Promise.all(
     illustJSON.map((json) =>
@@ -447,5 +703,12 @@ export async function downloadByIllusts(illustJSON: any[]): Promise<void> {
   );
   const dldir = path.join(config.path!, "PID");
   const illusts = await filterMissingIllusts(results.flat(), dldir);
+  logger.info("downloader", "metadata.collection_completed", "Illustration metadata collected", {
+    context: {
+      requested: results.flat().length,
+      missing: illusts.length,
+      skipped: results.flat().length - illusts.length,
+    },
+  });
   await downloadIllusts(illusts, dldir, config.thread);
 }

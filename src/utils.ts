@@ -5,15 +5,16 @@
 
 import fse from "fs-extra";
 import path from "node:path";
-import * as readline from "readline";
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
-import "colors";
 import { homedir, platform } from "node:os";
+import { startProgress, stopProgress } from "./progress.js";
+import logger, { type LogOptions } from "./logger.js";
 
 export type DownloadOptions = AxiosRequestConfig & {
   resume?: boolean;
+  log?: Pick<LogOptions, "context" | "async">;
 };
 
 export function getAppDataPath(appName: string): string {
@@ -26,17 +27,11 @@ export function getAppDataPath(appName: string): string {
 }
 
 export function showProgress(valFn: () => string | number): NodeJS.Timeout {
-  return setInterval(() => {
-    readline.clearLine(process.stdout, 0);
-    readline.cursorTo(process.stdout, 0);
-    process.stdout.write("Progress: " + `${valFn()}`.green);
-  }, 500);
+  return startProgress(() => `Progress: ${valFn()}`);
 }
 
 export function clearProgress(interval: NodeJS.Timeout): void {
-  clearInterval(interval);
-  readline.clearLine(process.stdout, 0);
-  readline.cursorTo(process.stdout, 0);
+  stopProgress(interval);
 }
 
 export async function download(
@@ -46,8 +41,10 @@ export async function download(
   axiosOption: DownloadOptions = {},
 ): Promise<AxiosResponse> {
   await fse.ensureDir(dirpath);
-  const { resume = true, ...requestOptions } = axiosOption;
+  const { resume = true, log, ...requestOptions } = axiosOption;
   const outputPath = path.join(dirpath, filename);
+  const operationId = logger.createOperationId("download");
+  const startedAt = Date.now();
   const existingSize =
     resume && (await fse.pathExists(outputPath))
       ? (await fse.stat(outputPath)).size
@@ -70,6 +67,21 @@ export async function download(
 
   const finalUrl = new URL(url);
 
+  logger.debug("transport", "download.started", "File download started", {
+    context: {
+      filename,
+      url: finalUrl.href,
+      existingSize,
+      resumed: existingSize > 0,
+      ...log?.context,
+    },
+    async: {
+      operationId,
+      ...log?.async,
+      phase: "running",
+    },
+  });
+
   // why should we use timeout * 2 ? since the axios timeout only applies to the response, not the connection.
   let timeout: NodeJS.Timeout | null = requestOptions.timeout
     ? setTimeout(() => {
@@ -90,6 +102,24 @@ export async function download(
       timeout = null;
     }
 
+    const bytes = await fse.stat(outputPath).then((stats) => stats.size);
+    logger.debug("transport", "download.succeeded", "File download succeeded", {
+      context: {
+        filename,
+        url: finalUrl.href,
+        status: res.status,
+        bytes,
+        durationMs: Date.now() - startedAt,
+        ...log?.context,
+      },
+      async: {
+        operationId,
+        ...log?.async,
+        phase: "success",
+        durationMs: Date.now() - startedAt,
+      },
+    });
+
     return res;
   } catch (err: any) {
     if (timeout) {
@@ -97,9 +127,40 @@ export async function download(
     }
 
     if (err.name === "AbortError" || err.message === "canceled") {
-      throw new Error("Connection timeout");
+      const timeoutError = new Error("Connection timeout", { cause: err });
+      logger.debug("transport", "download.failed", timeoutError.message, {
+        context: {
+          filename,
+          url: finalUrl.href,
+          durationMs: Date.now() - startedAt,
+          ...log?.context,
+        },
+        async: {
+          operationId,
+          ...log?.async,
+          phase: "failed",
+          durationMs: Date.now() - startedAt,
+        },
+        error: timeoutError,
+      });
+      throw timeoutError;
     }
 
+    logger.debug("transport", "download.failed", "File download failed", {
+      context: {
+        filename,
+        url: finalUrl.href,
+        durationMs: Date.now() - startedAt,
+        ...log?.context,
+      },
+      async: {
+        operationId,
+        ...log?.async,
+        phase: "failed",
+        durationMs: Date.now() - startedAt,
+      },
+      error: err,
+    });
     throw err;
   }
 }

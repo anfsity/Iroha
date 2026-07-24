@@ -3,7 +3,6 @@
  * Original file: src/illustrator.js
  */
 
-import "colors";
 import pLimit from "p-limit";
 import Illust from "./illustration.js";
 import PixivApi from "./pixiv-api-client.js";

@@ -7,11 +7,11 @@ import "colors";
 import Path from "path";
 import Pixiv from "./index.js";
 import pixivLogin from "./login.js";
-import logError from "./logError.js";
 import { checkProxy } from "./proxy.js";
 import appState from "./appState.js";
 import * as LoginProtocol from "./protocol/index.js";
 import receiveLoginCode from "./protocol/receiver.js";
+import { isLogFormat, isLogLevel, default as logger } from "./logger.js";
 import { Command } from "commander";
 import prompts from "prompts";
 import open from "open";
@@ -20,7 +20,7 @@ import { getAppDataPath } from "./utils.js";
 import { isUgoiraFormat } from "./ugoira.js";
 
 const onCancel = () => {
-  console.log("\nOperation cancelled.".yellow);
+  logger.info("cli", "prompt.cancelled", "Operation cancelled");
   process.exit(0);
 };
 
@@ -75,7 +75,13 @@ program
     "ugoira output format: zip, gif, or both (default: zip)",
   )
   .option("-O, --output-dir <dir>", "Specify download directory")
-  .option("--debug", "output all error messages while running")
+  .option("--debug", "enable debug logs")
+  .option(
+    "--log-level <level>",
+    "log level: trace, debug, info, warn, error, or fatal",
+  )
+  .option("--log-format <format>", "log format: human or jsonl")
+  .option("--log-file <path>", "write structured JSONL logs to a file")
   .option("--output-config-dir", "output the directory of config and exit")
   .option("--export-token", "output current refresh token and exit")
   .version(pkg.version, "-v, --version")
@@ -106,28 +112,30 @@ function isSystemError(err: any): err is systemError {
   try {
     const config = await Pixiv.readConfig();
     await main(config);
-    process.exit(0);
+    await logger.flush();
+    process.exitCode = 0;
   } catch (err: unknown) {
-    if (appState.debug) {
-      logError(err);
-      return;
-    }
-
     if (isSystemError(err)) {
       const errMsg = err.errors.system!.message!;
-      console.error(`\n${"ERROR:".red} ${errMsg}\n`);
+      logger.fatal("cli", "run.failed", errMsg, {
+        context: { category: "system" },
+        error: err,
+      });
 
       if (errMsg === "Invalid refresh token") {
-        console.log(
-          "Maybe CLIENT_ID and CLIENT_SECRET are updated, please try to relogin.\n"
-            .yellow,
+        logger.warn(
+          "auth",
+          "refresh_token.invalid",
+          "Maybe CLIENT_ID and CLIENT_SECRET are updated; please try to relogin",
         );
       }
-      return;
+    } else {
+      logger.fatal("cli", "run.failed", "Iroha terminated unexpectedly", {
+        error: err,
+      });
     }
-
-    logError(err);
-    process.exit(0);
+    await logger.flush();
+    process.exitCode = 1;
   }
 })();
 
@@ -142,15 +150,17 @@ async function main(config: any): Promise<void> {
 
   // Validate configuration
   if (!(await Pixiv.checkConfig(config))) {
-    console.log(
-      "\nRun " + "iroha -h".yellow + " for more usage information.\n",
+    logger.warn(
+      "cli",
+      "config.incomplete",
+      "Run iroha -h for more usage information",
     );
     return;
   }
 
   // Export refresh token
   if (opts.exportToken) {
-    console.log(config.refresh_token);
+    process.stdout.write(`${config.refresh_token ?? ""}\n`);
     return;
   }
 
@@ -161,12 +171,16 @@ async function main(config: any): Promise<void> {
   await pixiv.relogin();
 
   // Begin downloading
-  console.log(
-    "\nDownload Path:\t".cyan +
-      (config.download.path ? config.download.path.toString().yellow : ""),
-  );
+  logger.info("cli", "download.started", "Download session started", {
+    context: {
+      outputDir: config.download.path || null,
+      ugoiraFormat: appState.ugoiraFormat,
+    },
+  });
   if (typeof config.proxy === "string" && config.proxy.length > 0) {
-    console.log("Using Proxy:\t".cyan + config.proxy.yellow);
+    logger.info("proxy", "proxy.configured", "Using configured proxy", {
+      context: { proxy: config.proxy },
+    });
   }
 
   if (opts.follow) await pixiv.downloadFollowAll(false, !!opts.force);
@@ -207,7 +221,7 @@ async function main(config: any): Promise<void> {
   }
 
   pixiv.clearReloginInterval();
-  console.log();
+  logger.info("cli", "download.completed", "Download session completed");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -223,8 +237,24 @@ async function main(config: any): Promise<void> {
 async function handleArgv(config: any): Promise<boolean> {
   const opts = program.opts();
 
+  const logLevel = opts.logLevel ?? (opts.debug ? "debug" : "info");
+  const logFormat = opts.logFormat ?? "human";
+  if (!isLogLevel(logLevel)) {
+    throw new Error(`Invalid log level: ${String(logLevel)}`);
+  }
+  if (!isLogFormat(logFormat)) {
+    throw new Error(`Invalid log format: ${String(logFormat)}`);
+  }
+  logger.configure({
+    level: logLevel,
+    format: logFormat,
+    filePath: opts.logFile ?? null,
+  });
+
   if (opts.outputConfigDir) {
-    console.log(getAppDataPath("iroha"));
+    logger.info("cli", "config.directory", "Configuration directory", {
+      context: { path: getAppDataPath("iroha") },
+    });
     return false;
   }
 
@@ -252,7 +282,7 @@ async function handleArgv(config: any): Promise<boolean> {
 
   if (opts.logout) {
     await Pixiv.logout();
-    console.log("\nLogout success!\n".green);
+    logger.info("auth", "logout.succeeded", "Logout succeeded");
     return false;
   }
 
@@ -276,14 +306,16 @@ async function handleLogin(
   config: any,
   opts: Record<string, unknown>,
 ): Promise<void> {
-  console.log("\nPixiv Login\n".cyan);
+  logger.info("auth", "login.started", "Pixiv login started");
   try {
     await Pixiv.applyProxyConfig(config);
 
     if (typeof opts.login === "string") {
       // Token-based login
       const token = (opts.login as string).trim();
-      console.log("Login with refresh token", token.yellow);
+      logger.debug("auth", "login.token", "Login with refresh token", {
+        context: { token },
+      });
       await Pixiv.loginByToken(token);
     } else {
       // OAuth PKCE login
@@ -297,11 +329,13 @@ async function handleLogin(
         (await LoginProtocol.canInstall()) &&
         (await LoginProtocol.install())
       ) {
-        console.log("Login URL:", login_url.cyan);
-        console.log(
-          "Waiting login... More details:",
-          "https://github.com/anfsity/Iroha/blob/main/README.md".cyan,
-        );
+        logger.info("auth", "login.url", "Waiting for browser login", {
+          context: {
+            url: login_url,
+            instructions:
+              "https://github.com/anfsity/Iroha/blob/main/README.md",
+          },
+        });
 
         open(login_url);
         code = await receiveLoginCode();
@@ -325,7 +359,9 @@ async function handleLogin(
 
         if (!confirm) return;
 
-        console.log("\nLogin URL:", login_url.cyan);
+        logger.info("auth", "login.url", "Open the login URL in a browser", {
+          context: { url: login_url },
+        });
         await open(login_url);
         code = await promptForCode();
       }
@@ -333,16 +369,14 @@ async function handleLogin(
       await Pixiv.login(code, code_verifier);
     }
 
-    console.log("\nLogin success!\n".green);
+    logger.info("auth", "login.succeeded", "Login succeeded");
   } catch (error) {
-    console.log(
-      "\nLogin fail!".red,
-      "Please check your input or proxy setting.\n",
+    logger.error(
+      "auth",
+      "login.failed",
+      "Login failed; check the input or proxy setting",
+      { error },
     );
-
-    if (appState.debug) {
-      console.error(error);
-    }
   }
 }
 
@@ -446,7 +480,7 @@ async function handleSettings(config: any): Promise<void> {
     await Pixiv.writeConfig(config);
   }
 
-  console.log("Settings saved.".green);
+  logger.info("config", "settings.saved", "Settings saved");
 }
 
 async function handleSettingDownloadPath(config: any): Promise<void> {
@@ -554,6 +588,6 @@ async function handleSettingProxy(config: any): Promise<void> {
 /* -------------------------------------------------------------------------- */
 
 function help(): void {
-  console.error("\nMissing arguments!".bgRed);
+  logger.warn("cli", "arguments.missing", "Missing arguments");
   program.outputHelp();
 }

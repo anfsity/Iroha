@@ -26,7 +26,6 @@ SOFTWARE.
 
 // I adopted it from the original source
 
-import "colors";
 import axios, {
   AxiosError,
   type AxiosInstance,
@@ -35,9 +34,8 @@ import axios, {
 import qs from "qs";
 import md5 from "blueimp-md5";
 import moment from "moment";
-import * as readline from "readline";
-import logError from "./logError.js";
 import { sleep } from "./utils.js";
+import logger from "./logger.js";
 
 
 const BASE_URL: string = "https://app-api.pixiv.net";
@@ -60,44 +58,130 @@ async function callApi(
   options: AxiosRequestConfig,
   retry: number = 2,
   axiosInstance?: AxiosInstance,
+  operationId: string = logger.createOperationId("api"),
 ): Promise<any> {
   const finalUrl: string = /^https?:\/\//i.test(url) ? url : BASE_URL + url;
   const instance = axiosInstance || getHttp();
+  const startedAt = Date.now();
+
+  logger.debug("pixiv-api", "request.started", "Pixiv API request started", {
+    context: {
+      method: options.method || "GET",
+      url: finalUrl,
+      retryRemaining: retry,
+    },
+    async: {
+      operationId,
+      phase: "running",
+    },
+  });
 
   try {
     const res = await instance(finalUrl, options);
+    logger.debug("pixiv-api", "request.succeeded", "Pixiv API request succeeded", {
+      context: {
+        method: options.method || "GET",
+        url: finalUrl,
+        status: res.status,
+        durationMs: Date.now() - startedAt,
+      },
+      async: {
+        operationId,
+        phase: "success",
+        durationMs: Date.now() - startedAt,
+      },
+    });
     return res.data;
   } catch (rawErr: any) {
     const err = rawErr as AxiosError<any>;
+    const status = err.response?.status;
+    const baseContext = {
+      method: options.method || "GET",
+      url: finalUrl,
+      status,
+      code: err.code,
+      durationMs: Date.now() - startedAt,
+    };
 
     if (err.code == "ECONNRESET") {
-      readline.clearLine(process.stdout, 0);
-      readline.cursorTo(process.stdout, 0);
-      console.error("Connection reset detected.".gray);
+      logger.warn(
+        "pixiv-api",
+        "request.retrying",
+        "Connection reset; retrying Pixiv API request",
+        {
+          context: { ...baseContext, reason: "ECONNRESET" },
+          async: {
+            operationId,
+            phase: "retrying",
+            attempt: 2 - retry + 1,
+          },
+          error: err,
+        },
+      );
       await sleep(3000);
-      return callApi(url, options, retry, instance);
+      return callApi(url, options, retry, instance, operationId);
     }
 
     if (err.response && err.response.data) {
       const msg: string = JSON.stringify(err.response.data);
 
       if (/rate limit/i.test(msg)) {
-        console.error("Rate limit detected. Pause for 10 mintues.".gray);
+        logger.warn(
+          "pixiv-api",
+          "request.rate_limited",
+          "Pixiv rate limit detected; pausing before retry",
+          {
+            context: baseContext,
+            async: { operationId, phase: "waiting" },
+            error: err,
+          },
+        );
         await sleep(10 * 60 * 1000);
-        return callApi(url, options, retry, instance);
+        return callApi(url, options, retry, instance, operationId);
       } else {
-        throw msg;
+        const apiError = new Error("Pixiv API returned an error", {
+          cause: err,
+        });
+        if (status !== undefined) {
+          (apiError as { status?: number; responseBody?: unknown }).status =
+            status;
+        }
+        (apiError as { status?: number; responseBody?: unknown }).responseBody =
+          err.response.data;
+        logger.error("pixiv-api", "request.failed", apiError.message, {
+          context: { ...baseContext, responseBody: err.response.data },
+          async: { operationId, phase: "failed" },
+          error: apiError,
+        });
+        throw apiError;
       }
     } else {
       if (retry <= 0) {
-        throw err.message;
+        logger.error(
+          "pixiv-api",
+          "request.failed",
+          "Pixiv API request failed",
+          {
+            context: baseContext,
+            async: { operationId, phase: "failed" },
+            error: err,
+          },
+        );
+        throw err;
       }
 
-      console.error("RETRY".yellow, url);
-      console.error(err.message);
+      logger.warn("pixiv-api", "request.retrying", "Retrying Pixiv API request", {
+        context: { ...baseContext, retryRemaining: retry },
+        async: {
+          operationId,
+          phase: "retrying",
+          attempt: 2 - retry + 1,
+        },
+        error: err,
+      });
       await sleep(1000);
 
-      return callApi(url, options, retry - 1, instance);
+      return callApi(url, options, retry - 1, instance, operationId);
     }
   }
 }
@@ -171,10 +255,14 @@ export class PixivApi {
       return data.response;
     } catch (err: any) {
       if (err.response) {
-        throw err.response.data;
-      } else {
-        throw err.message;
+        const error = new Error("Pixiv token request failed", { cause: err });
+        (error as { status?: number; responseBody?: unknown }).status =
+          err.response.status;
+        (error as { status?: number; responseBody?: unknown }).responseBody =
+          err.response.data;
+        throw error;
       }
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 
