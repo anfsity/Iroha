@@ -38,8 +38,9 @@ export async function downloadByIllustrators(
     const illustrator = illustrators[i];
     if (!illustrator) continue;
 
+    let illustratorInfo;
     try {
-      await illustrator.info();
+      illustratorInfo = await illustrator.info();
     } catch (err: any) {
       if (err instanceof Error) {
         console.log(err);
@@ -56,7 +57,10 @@ export async function downloadByIllustrators(
         `${"uid ".gray}${illustrator.id.toString().cyan} ${illustrator.name.yellow}`,
     );
 
-    const info = await getDownloadListByIllustrator(illustrator);
+    const info = await getDownloadListByIllustrator(
+      illustrator,
+      illustratorInfo,
+    );
 
     await downloadIllusts(
       info.illusts,
@@ -73,24 +77,28 @@ export async function downloadByIllustrators(
  */
 async function getDownloadListByIllustrator(
   illustrator: Illustrator,
+  cachedInfo: any,
 ): Promise<DownloadListResult> {
   let illusts: Illust[] = [];
 
-  const dir = await illustrator.info().then(getIllustratorNewDir);
-  const dldir = path.join(config.path!, dir); //< download directory
+  const dir = await getIllustratorNewDir(cachedInfo);
+  const dldir = path.join(config.path!, dir);
   const ugoiraDir = new utils.UgoiraDir(dldir);
 
-  const illustExists = (file: string) =>
+  const illustExists = async (file: string) =>
     file.endsWith(".zip")
-      ? ugoiraDir.existsSync(file)
-      : fse.existsSync(path.join(dldir, file));
+      ? await ugoiraDir.exists(file)
+      : await fse.pathExists(path.join(dldir, file));
 
   const exampleIllusts = illustrator.exampleIllusts;
   if (exampleIllusts) {
     let existNum = 0;
     for (const ei of exampleIllusts) {
-      if (illustExists(ei.file)) existNum++;
-      else illusts.push(ei);
+      if (await illustExists(ei.file)) {
+        existNum++;
+      } else {
+        illusts.push(ei);
+      }
     }
 
     if (existNum > 0) {
@@ -106,7 +114,7 @@ async function getDownloadListByIllustrator(
     cnt = 0;
     const temps = await illustrator.illusts();
     for (const temp of temps) {
-      if (!illustExists(temp.file)) {
+      if (!(await illustExists(temp.file))) {
         illusts.push(temp);
         cnt++;
       }
@@ -125,10 +133,11 @@ export async function downloadByBookmark(
   const dir = `[bookmark] ${isPrivate ? "Private" : "Public"}`;
   const dldir = path.join(config.path!, dir);
   const ugoiraDir = new utils.UgoiraDir(dldir);
-  const illustExists = (file: string) =>
+
+  const illustExists = async (file: string) =>
     file.endsWith(".zip")
-      ? ugoiraDir.existsSync(file)
-      : fse.existsSync(path.join(dldir, file));
+      ? await ugoiraDir.exists(file)
+      : await fse.pathExists(path.join(dldir, file));
 
   console.log(
     `\nCollecting illusts of your bookmark (${isPrivate ? "Private" : "Public"})`,
@@ -142,7 +151,7 @@ export async function downloadByBookmark(
     cnt = 0;
     const temps = await me.bookmarks(isPrivate);
     for (const temp of temps) {
-      if (!illustExists(temp.file)) {
+      if (!(await illustExists(temp.file))) {
         illusts.push(temp);
         cnt++;
       }
@@ -153,7 +162,6 @@ export async function downloadByBookmark(
   await downloadIllusts(illusts.reverse(), dldir, config.thread);
 }
 
-// multithread...
 export async function downloadIllusts(
   illusts: Illust[],
   dldir: string,
@@ -183,10 +191,8 @@ export async function downloadIllusts(
     };
 
     for (let attempt = 1; attempt <= max_retries; ++attempt) {
-      if (pause) {
+      while (pause) {
         await sleep(1000);
-        attempt--;
-        continue;
       }
 
       try {
@@ -276,8 +282,9 @@ async function getIllustratorNewDir(data: {
   await fse.ensureDir(mainDir);
   const files = await fse.readdir(mainDir);
 
+  const prefix = `(${data.id})`;
   for (const file of files) {
-    if (file.indexOf(`(${data.id})`) === 0) {
+    if (file.startsWith(prefix)) {
       dldir = file;
       break;
     }

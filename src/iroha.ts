@@ -80,8 +80,6 @@ program
 /*  Main entry point                                                          */
 /* -------------------------------------------------------------------------- */
 
-const config = Pixiv.readConfig();
-
 interface systemError {
   errors: {
     system?: {
@@ -101,7 +99,8 @@ function isSystemError(err: any): err is systemError {
 
 (async function run(): Promise<void> {
   try {
-    await main();
+    const config = await Pixiv.readConfig();
+    await main(config);
     process.exit(0);
   } catch (err: unknown) {
     if (appState.debug) {
@@ -123,7 +122,6 @@ function isSystemError(err: any): err is systemError {
     }
 
     logError(err);
-
     process.exit(0);
   }
 })();
@@ -131,15 +129,14 @@ function isSystemError(err: any): err is systemError {
 /* -------------------------------------------------------------------------- */
 /*  Core logic                                                                */
 /* -------------------------------------------------------------------------- */
-
-async function main(): Promise<void> {
-  const shouldDownload = await handleArgv();
+async function main(config: any): Promise<void> {
+  const shouldDownload = await handleArgv(config);
   if (!shouldDownload) return;
 
   const opts = program.opts();
 
   // Validate configuration
-  if (!Pixiv.checkConfig(config)) {
+  if (!(await Pixiv.checkConfig(config))) {
     console.log(
       "\nRun " + "iroha -h".yellow + " for more usage information.\n",
     );
@@ -152,7 +149,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  Pixiv.applyConfig(config);
+  await Pixiv.applyConfig(config);
 
   // Re-authenticate
   const pixiv = new Pixiv();
@@ -218,7 +215,7 @@ async function main(): Promise<void> {
  * @returns `true` if the caller should proceed to the download phase,
  *          `false` if the command was fully handled (e.g. login, settings).
  */
-async function handleArgv(): Promise<boolean> {
+async function handleArgv(config: any): Promise<boolean> {
   const opts = program.opts();
 
   if (opts.outputConfigDir) {
@@ -237,18 +234,18 @@ async function handleArgv(): Promise<boolean> {
   // --- Login / Logout / Settings ---
 
   if (opts.login !== undefined) {
-    await handleLogin(opts);
+    await handleLogin(config, opts);
     return false;
   }
 
   if (opts.logout) {
-    Pixiv.logout();
+    await Pixiv.logout();
     console.log("\nLogout success!\n".green);
     return false;
   }
 
   if (opts.setting) {
-    await handleSettings();
+    await handleSettings(config);
     return false;
   }
 
@@ -263,11 +260,13 @@ async function handleArgv(): Promise<boolean> {
 /* -------------------------------------------------------------------------- */
 /*  Login                                                                     */
 /* -------------------------------------------------------------------------- */
-
-async function handleLogin(opts: Record<string, unknown>): Promise<void> {
+async function handleLogin(
+  config: any,
+  opts: Record<string, unknown>,
+): Promise<void> {
   console.log("\nPixiv Login\n".cyan);
   try {
-    Pixiv.applyProxyConfig(config);
+    await Pixiv.applyProxyConfig(config);
 
     if (typeof opts.login === "string") {
       // Token-based login
@@ -363,8 +362,7 @@ async function promptForCode(): Promise<string> {
 /* -------------------------------------------------------------------------- */
 /*  Settings                                                                  */
 /* -------------------------------------------------------------------------- */
-
-async function handleSettings(): Promise<void> {
+async function handleSettings(config: any): Promise<void> {
   while (true) {
     console.clear();
     console.log("Iroha Options".green);
@@ -410,43 +408,43 @@ async function handleSettings(): Promise<void> {
 
     switch (action) {
       case "path":
-        await handleSettingDownloadPath();
+        await handleSettingDownloadPath(config);
         break;
       case "thread":
-        await handleSettingDownloadThread();
+        await handleSettingDownloadThread(config);
         break;
       case "timeout":
-        await handleSettingDownloadTimeout();
+        await handleSettingDownloadTimeout(config);
         break;
       case "rename":
         config.download.autoRename = !config.download.autoRename;
         break;
       case "proxy":
-        await handleSettingProxy();
+        await handleSettingProxy(config);
         break;
     }
 
-    Pixiv.writeConfig(config);
+    await Pixiv.writeConfig(config);
   }
 
   console.log("Settings saved.".green);
 }
 
-async function handleSettingDownloadPath(): Promise<void> {
+async function handleSettingDownloadPath(config: any): Promise<void> {
   const initial = config.download.path || "";
-  config.download.path =
-    (
-      await prompts({
-        type: "text",
-        name: "value",
-        message: "Please input a download path".yellow,
-        format: (v: string) => Path.resolve(v.trim()),
-        initial,
-      })
-    ).value || initial;
+  const response = await prompts({
+    type: "text",
+    name: "value",
+    message: "Please input a download path".yellow,
+    format: (v: string) => Path.resolve(v.trim()),
+    initial,
+  });
+  if (response.value) {
+    config.download.path = response.value;
+  }
 }
 
-async function handleSettingDownloadThread(): Promise<void> {
+async function handleSettingDownloadThread(config: any): Promise<void> {
   const { value } = await prompts(
     {
       type: "number",
@@ -463,7 +461,7 @@ async function handleSettingDownloadThread(): Promise<void> {
   }
 }
 
-async function handleSettingDownloadTimeout(): Promise<void> {
+async function handleSettingDownloadTimeout(config: any): Promise<void> {
   const { value } = await prompts(
     {
       type: "number",
@@ -480,7 +478,7 @@ async function handleSettingDownloadTimeout(): Promise<void> {
   }
 }
 
-async function handleSettingProxy(): Promise<void> {
+async function handleSettingProxy(config: any): Promise<void> {
   const message =
     "Please input your HTTP/SOCKS proxy like:\n".yellow +
     "  <protocol>://[user:passwd@]<hostname>[:<port>]\n" +

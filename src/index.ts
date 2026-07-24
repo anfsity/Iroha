@@ -38,18 +38,19 @@ export default class Pixiv {
   private reloginInterval: NodeJS.Timeout | null = null;
   private followNextUrl: string | null = null;
 
-  static initConfig(forceInit: boolean = false): void {
-    fse.ensureDirSync(CONFIG_FILE_DIR);
-    if (!fse.existsSync(CONFIG_FILE_DIR) || forceInit) {
-      fse.writeJsonSync(CONFIG_FILE, defaultConfig);
+  static async initConfig(forceInit: boolean = false): Promise<void> {
+    await fse.ensureDir(CONFIG_FILE_DIR);
+    const exists = await fse.pathExists(CONFIG_FILE);
+    if (!exists || forceInit) {
+      await fse.writeJson(CONFIG_FILE, defaultConfig);
     }
   }
 
-  static readConfig(): AppConfig {
-    this.initConfig();
-    const config: AppConfig = (() => {
+  static async readConfig(): Promise<AppConfig> {
+    await this.initConfig();
+    const config: AppConfig = await (async () => {
       try {
-        return fse.readJSONSync(CONFIG_FILE);
+        return await fse.readJSON(CONFIG_FILE);
       } catch (err: any) {
         return defaultConfig;
       }
@@ -63,21 +64,22 @@ export default class Pixiv {
     return config;
   }
 
-  static writeConfig(config: AppConfig): void {
-    fse.ensureDirSync(CONFIG_FILE_DIR);
-    fse.writeJsonSync(CONFIG_FILE, config);
+  static async writeConfig(config: AppConfig): Promise<void> {
+    await fse.ensureDir(CONFIG_FILE_DIR);
+    await fse.writeJson(CONFIG_FILE, config);
   }
 
-  static checkConfig(config: AppConfig = this.readConfig()): boolean {
+  static async checkConfig(config?: AppConfig): Promise<boolean> {
+    const targetConfig = config || (await this.readConfig());
     let check: boolean = true;
-    if (!config.refresh_token) {
+    if (!targetConfig.refresh_token) {
       console.error(
         "\nYou must login first!".red + "\n Try " + "iroha --login".yellow,
       );
       check = false;
     }
 
-    if (!config.download.path) {
+    if (!targetConfig.download.path) {
       console.error(
         "\nYou must set download path first!".red +
           "\n Try " +
@@ -88,15 +90,17 @@ export default class Pixiv {
     return check;
   }
 
-  static applyConfig(config: AppConfig = this.readConfig()): void {
-    __config = config;
-    config.download.tmp = path.join(CONFIG_FILE_DIR, "tmp");
-    Downloader.setConfig(config.download);
-    this.applyProxyConfig(config);
+  static async applyConfig(config?: AppConfig): Promise<void> {
+    const targetConfig = config || (await this.readConfig());
+    __config = targetConfig;
+    targetConfig.download.tmp = path.join(CONFIG_FILE_DIR, "tmp");
+    Downloader.setConfig(targetConfig.download);
+    await this.applyProxyConfig(targetConfig);
   }
 
-  static applyProxyConfig(config: AppConfig = this.readConfig()): void {
-    const agent = getProxyAgent(config.proxy);
+  static async applyProxyConfig(config?: AppConfig): Promise<void> {
+    const targetConfig = config || (await this.readConfig());
+    const agent = getProxyAgent(targetConfig.proxy);
     delSysProxy();
     if (agent) {
       Downloader.setAgent(agent);
@@ -109,22 +113,23 @@ export default class Pixiv {
     const pixivApi = new PixivApi();
     await pixivApi.tokenRequest(code, code_verifier);
     const refresh_token = pixivApi.authInfo().refresh_token;
-    const config = this.readConfig();
+    const config = await this.readConfig();
     config.refresh_token = refresh_token;
-    this.writeConfig(config);
+    await this.writeConfig(config);
   }
 
   static async loginByToken(token: string): Promise<void> {
     const pixivApi = new PixivApi();
     await pixivApi.refreshAccessToken(token);
-    const config = this.readConfig();
+    const config = await this.readConfig();
     config.refresh_token = token;
-    this.writeConfig(config);
+    await this.writeConfig(config);
   }
 
   // FIXME: ... Perhaps the author really doesnt know how to write asynchronous programming :)
   async relogin(): Promise<boolean> {
-    const refresh_token = Pixiv.readConfig().refresh_token;
+    const config = await Pixiv.readConfig();
+    const refresh_token = config.refresh_token;
     if (!refresh_token) return false;
 
     this.clearReloginInterval();
@@ -168,10 +173,10 @@ export default class Pixiv {
     }
   }
 
-  static logout(): void {
-    const config = this.readConfig();
+  static async logout(): Promise<void> {
+    const config = await this.readConfig();
     config.refresh_token = null;
-    this.writeConfig(config);
+    await this.writeConfig(config);
   }
 
   async getMyFollow(isPrivate: boolean): Promise<Illustrator[]> {
@@ -243,16 +248,16 @@ export default class Pixiv {
       CONFIG_FILE_DIR,
       (isPrivate ? "private" : "public") + ".json",
     );
-    const tmpJsonExist = fse.existsSync(tmpJson);
+    const tmpJsonExist = await fse.pathExists(tmpJson);
 
     if (__config.download.path) {
-      fse.ensureDirSync(__config.download.path);
+      await fse.ensureDir(__config.download.path);
     }
 
     if (
       !tmpJsonExist ||
       force ||
-      (tmpJsonExist && !(follows = utils.readJsonSafely(tmpJson, null)))
+      (tmpJsonExist && !(follows = await utils.readJsonSafely(tmpJson, null)))
     ) {
       console.log("\nCollecting your follows");
       follows = [];
@@ -265,8 +270,8 @@ export default class Pixiv {
           illusts: illustrator.exampleIllusts,
         });
       });
-      fse.ensureDirSync(CONFIG_FILE_DIR);
-      fse.writeJsonSync(tmpJson, follows);
+      await fse.ensureDir(CONFIG_FILE_DIR);
+      await fse.writeJson(tmpJson, follows);
     }
 
     if (!illustrators && follows) {
@@ -279,17 +284,17 @@ export default class Pixiv {
     }
 
     if (illustrators) {
-      await Downloader.downloadByIllustrators(illustrators, () => {
+      await Downloader.downloadByIllustrators(illustrators, async () => {
         if (follows) {
           follows.shift();
-          fse.ensureDirSync(CONFIG_FILE_DIR);
-          fse.writeJsonSync(tmpJson, follows);
+          await fse.ensureDir(CONFIG_FILE_DIR);
+          await fse.writeJson(tmpJson, follows);
         }
       });
     }
 
-    if (fse.existsSync(tmpJson)) {
-      fse.unlinkSync(tmpJson);
+    if (await fse.pathExists(tmpJson)) {
+      await fse.unlink(tmpJson);
     }
   }
 
@@ -297,14 +302,13 @@ export default class Pixiv {
     const uids: string[] = [];
     if (!__config.download.path) return;
 
-    fse.ensureDirSync(__config.download.path);
-    const files = fse.readdirSync(__config.download.path);
+    await fse.ensureDir(__config.download.path);
+    const files = await fse.readdir(__config.download.path);
     for (const file of files) {
       const search = /^\(([0-9]+)\)/.exec(file);
       if (search && search[1]) uids.push(search[1]);
     }
-    const illustrators: Illustrator[] = [];
-    uids.forEach((uid) => illustrators.push(new Illustrator(uid)));
+    const illustrators: Illustrator[] = uids.map((uid) => new Illustrator(uid));
     await Downloader.downloadByIllustrators(illustrators);
   }
 
@@ -317,9 +321,10 @@ export default class Pixiv {
     if (!__config.download.path) return;
 
     const dirPath = path.join(__config.download.path, "PID");
-    fse.ensureDirSync(dirPath);
-    const exists = fse
-      .readdirSync(dirPath)
+    await fse.ensureDir(dirPath);
+
+    const files = await fse.readdir(dirPath);
+    const exists = files
       .map((file) => {
         const search = /^\(([0-9]+)\)/.exec(file);
         if (search && search[1]) return search[1];

@@ -39,7 +39,7 @@ export async function download(
   url: string,
   axiosOption: AxiosRequestConfig = {},
 ): Promise<AxiosResponse> {
-  fse.ensureDirSync(dirpath);
+  await fse.ensureDir(dirpath);
   const controller = new AbortController();
 
   const config: AxiosRequestConfig = {
@@ -65,7 +65,7 @@ export async function download(
       timeout = null;
     }
 
-    fse.writeFileSync(path.join(dirpath, filename), res.data);
+    await fse.writeFile(path.join(dirpath, filename), res.data);
     return res;
   } catch (err: any) {
     if (timeout) {
@@ -80,33 +80,45 @@ export async function download(
   }
 }
 
-export function readJsonSafely<T>(path: string, defaultValue: T): T {
-  if (!fse.existsSync(path)) {
+export async function readJsonSafely<T>(
+  path: string,
+  defaultValue: T,
+): Promise<T> {
+  if (!(await fse.pathExists(path))) {
     return defaultValue;
   }
 
   try {
-    return fse.readJSONSync(path) as T;
+    return (await fse.readJSON(path)) as T;
   } catch (err) {
     return defaultValue;
   }
 }
 
 export class UgoiraDir {
-  private files: Set<string>;
+  private files: Set<string> = new Set();
+  private dirpath: string;
+  private initialized: boolean = false;
 
   constructor(dirpath: string) {
-    const existingFiles = fse.existsSync(dirpath)
-      ? fse
-          .readdirSync(dirpath)
-          .filter((file) => file.endsWith(".zip"))
-          .map((file) => this.normalizeFilename(file))
-      : [];
-
-    this.files = new Set(existingFiles);
+    this.dirpath = dirpath;
   }
 
-  public existsSync(file: string): boolean {
+  private async init(): Promise<void> {
+    if (this.initialized) return;
+
+    if (await fse.pathExists(this.dirpath)) {
+      const allFiles = await fse.readdir(this.dirpath);
+      const existingFiles = allFiles
+        .filter((file) => file.endsWith(".zip"))
+        .map((file) => this.normalizeFilename(file));
+      this.files = new Set(existingFiles);
+    }
+    this.initialized = true;
+  }
+
+  public async exists(file: string): Promise<boolean> {
+    await this.init();
     return this.files.has(this.normalizeFilename(file));
   }
 
@@ -120,4 +132,3 @@ export { default as logError } from "./logError.js";
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
