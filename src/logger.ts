@@ -4,13 +4,7 @@ import { randomUUID } from "node:crypto";
 import "colors";
 import { resumeProgress, suspendProgress } from "./progress.js";
 
-export type LogLevel =
-  | "trace"
-  | "debug"
-  | "info"
-  | "warn"
-  | "error"
-  | "fatal";
+export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 
 export type LogFormat = "human" | "jsonl";
 
@@ -20,13 +14,7 @@ export interface AsyncLogContext {
   taskId?: string;
   parentId?: string;
   workerId?: string;
-  phase?:
-    | "queued"
-    | "running"
-    | "waiting"
-    | "retrying"
-    | "success"
-    | "failed";
+  phase?: "queued" | "running" | "waiting" | "retrying" | "success" | "failed";
   attempt?: number;
   durationMs?: number;
 }
@@ -94,7 +82,8 @@ const URL_KEY = /(?:href|proxy|uri|url)$/i;
 const MAX_SERIALIZE_DEPTH = 6;
 const MAX_SERIALIZE_KEYS = 100;
 const MAX_STRING_LENGTH = 4096;
-const ANSI_ESCAPE = /[\u001B\u009B][[\]()#;?]*(?:(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d\/#&.:=?%@~_]+)*)?\u0007)|(?:(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~])))/g;
+const ANSI_ESCAPE =
+  /[\u001B\u009B][[\]()#;?]*(?:(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d\/#&.:=?%@~_]+)*)?\u0007)|(?:(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~])))/g;
 const URL_CREDENTIALS = /:\/\/[^/\s:@]+:[^/\s@]+@/g;
 const SENSITIVE_PARAMETER =
   /([?&](?:access[_-]?token|authorization|client[_-]?secret|code|cookie|key|password|passwd|refresh[_-]?token|secret|token)=)[^&#\s]*/gi;
@@ -198,12 +187,7 @@ function sanitizeValue(
     const result: Record<string, JsonValue> = {};
     const entries = Object.entries(value as Record<string, unknown>);
     for (const [entryKey, entryValue] of entries.slice(0, MAX_SERIALIZE_KEYS)) {
-      result[entryKey] = sanitizeValue(
-        entryValue,
-        entryKey,
-        seen,
-        depth + 1,
-      );
+      result[entryKey] = sanitizeValue(entryValue, entryKey, seen, depth + 1);
     }
     if (entries.length > MAX_SERIALIZE_KEYS) {
       result.__truncated__ = `${entries.length - MAX_SERIALIZE_KEYS} more keys`;
@@ -323,25 +307,71 @@ function colorizeLevel(level: LogLevel): string {
   }
 }
 
-function formatHuman(record: LogRecord): string {
-  const level = process.stdout.isTTY
-    ? colorizeLevel(record.level).toUpperCase()
-    : record.level.toUpperCase();
-  const lines = [
-    `${record.timestamp} ${level.padEnd(5)} [${record.scope}] ${record.event}: ${record.message}`,
-    `  async: ${JSON.stringify(record.async)}`,
-  ];
+const ACTION_LABELS: Record<string, string> = {
+  "DOWNLOAD.SUCCEEDED": "DONE",
+  "DOWNLOAD.RESUMED": "RESUME",
+  "CONVERSION.SUCCEEDED": "GIF",
+  "ILLUSTRATOR.COLLECTION_STARTED": "GET",
+  "METADATA.COLLECTION_COMPLETED": "META",
+  "DIRECTORY.RENAMED": "MOVE",
+  "ARCHIVE.REMOVED": "CLEAN",
+  "NETWORK.RESUMED": "RETRY",
+};
 
-  if (Object.keys(record.context).length > 0) {
-    lines.push(`  context: ${JSON.stringify(record.context)}`);
+function formatHuman(record: LogRecord): string {
+  const transientPhases = ["queued", "running"];
+  if (record.async?.phase && transientPhases.includes(record.async.phase))
+    return "";
+
+  const isTTY = process.stdout.isTTY;
+  const now = new Date();
+  const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
+    .map((n) => n.toString().padStart(2, "0"))
+    .join(":").gray;
+
+  const status = isTTY
+    ? colorizeLevel(record.level).toUpperCase()
+    : record.level.toUpperCase().padEnd(5);
+
+  const ctx = record.context;
+  let subject = "";
+  if (ctx.from && ctx.to) {
+    subject = `${String(ctx.from).yellow} -> ${String(ctx.to).green}`;
+  } else {
+    const rawName = ctx.name || ctx.title || "";
+    const nameStr = rawName ? String(rawName).yellow : "";
+    const idVal = ctx.pid || ctx.uid;
+    const idStr = idVal ? `(${idVal})`.cyan : "";
+    subject = `${nameStr} ${idStr}`.trim();
   }
+
+  const eventKey = record.event.toUpperCase();
+  const actionTag = ACTION_LABELS[eventKey] || eventKey.split(".").pop();
+  const action = actionTag ? ` ${actionTag} `.white : ` ${record.message} `;
+
+  const meta: string[] = [];
+  if (ctx.durationMs) {
+    const ms = Number(ctx.durationMs);
+    meta.push(ms > 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`);
+  }
+  if (ctx.bytes) {
+    meta.push(`${(Number(ctx.bytes) / 1024 / 1024).toFixed(2)}MB`);
+  }
+  const info = meta.length > 0 ? `(${meta.join(" | ")})`.gray : "";
+
+  const progress =
+    ctx.index && ctx.total ? `[${ctx.index}/${ctx.total}]`.gray : "";
+
+  // [时间] [级别] [作用域] [名字(ID)] [动作] [耗时/大小] [进度]
+  const scope = `[${record.scope}]`.blue;
+
+  let mainLine = `${time} ${status} ${scope} ${subject}${action}${info} ${progress}`;
+
   if (record.error) {
-    lines.push(`  error: ${JSON.stringify(record.error)}`);
+    mainLine += `\n  ┗━ ${"ERR:".red} ${record.error.message.red}`;
   }
-  if (record.stack) {
-    lines.push(`  stack:\n${record.stack}`);
-  }
-  return lines.join("\n");
+
+  return mainLine.trim();
 }
 
 export class Logger {
@@ -398,7 +428,9 @@ export class Logger {
       scope: redactText(scope),
       event: redactText(event),
       message: redactText(message),
-      stack: serializedError?.stack ?? (options.stack ? redactText(options.stack) : null),
+      stack:
+        serializedError?.stack ??
+        (options.stack ? redactText(options.stack) : null),
       context: sanitizeContext(options.context),
       async: mergeAsyncContext(this.baseAsync, options.async),
       error: serializedError,
@@ -476,6 +508,11 @@ export class Logger {
   }
 
   private writeTerminal(record: LogRecord): void {
+    const text =
+      this.format === "jsonl" ? JSON.stringify(record) : formatHuman(record);
+
+    if (!text) return;
+
     const wasSuspended = suspendProgress();
     const output =
       record.level === "warn" ||
@@ -483,8 +520,7 @@ export class Logger {
       record.level === "fatal"
         ? process.stderr
         : process.stdout;
-    const text =
-      this.format === "jsonl" ? JSON.stringify(record) : formatHuman(record);
+
     output.write(`${text}\n`);
     resumeProgress(wasSuspended);
   }
