@@ -290,20 +290,20 @@ function mergeAsyncContext(
   ) as unknown as AsyncLogContext;
 }
 
-function colorizeLevel(level: LogLevel): string {
+function colorizeLevel(level: LogLevel, text: string = level): string {
   switch (level) {
     case "trace":
-      return level.gray;
+      return text.gray;
     case "debug":
-      return level.cyan;
+      return text.cyan;
     case "info":
-      return level.green;
+      return text.green;
     case "warn":
-      return level.yellow;
+      return text.yellow;
     case "error":
-      return level.red;
+      return text.red;
     case "fatal":
-      return level.bgRed.white;
+      return text.bgRed.white;
   }
 }
 
@@ -311,7 +311,7 @@ const ACTION_LABELS: Record<string, string> = {
   "DOWNLOAD.SUCCEEDED": "DONE",
   "DOWNLOAD.RESUMED": "RESUME",
   "CONVERSION.SUCCEEDED": "GIF",
-  "ILLUSTRATOR.COLLECTION_STARTED": "GET",
+  "ILLUSTRATOR.COLLECTION_STARTED": "ILLUSTRATOR",
   "METADATA.COLLECTION_COMPLETED": "META",
   "DIRECTORY.RENAMED": "MOVE",
   "ARCHIVE.REMOVED": "CLEAN",
@@ -324,14 +324,17 @@ function formatHuman(record: LogRecord): string {
     return "";
 
   const isTTY = process.stdout.isTTY;
-  const now = new Date();
-  const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
-    .map((n) => n.toString().padStart(2, "0"))
-    .join(":").gray;
+  const timestamp = new Date(record.timestamp);
+  const time = Number.isNaN(timestamp.getTime())
+    ? record.timestamp
+    : [timestamp.getHours(), timestamp.getMinutes(), timestamp.getSeconds()]
+        .map((n) => n.toString().padStart(2, "0"))
+        .join(":").gray;
 
-  const status = isTTY
-    ? colorizeLevel(record.level).toUpperCase()
-    : record.level.toUpperCase().padEnd(5);
+  const statusText = record.level.toUpperCase().padEnd(5);
+  // Uppercase before applying ANSI styles. Uppercasing a styled string would
+  // turn the escape terminator `m` into `M` and corrupt terminal rendering.
+  const status = isTTY ? colorizeLevel(record.level, statusText) : statusText;
 
   const ctx = record.context;
   let subject = "";
@@ -362,9 +365,9 @@ function formatHuman(record: LogRecord): string {
   const progress =
     ctx.index && ctx.total ? `[${ctx.index}/${ctx.total}]`.gray : "";
 
-  // [时间] [级别] [作用域] [名字(ID)] [动作] [耗时/大小] [进度]
   const scope = `[${record.scope}]`.blue;
 
+  // [时间] [级别] [作用域] [名字(ID)] [动作] [耗时/大小] [进度]
   let mainLine = `${time} ${status} ${scope} ${subject}${action}${info} ${progress}`;
 
   if (record.error) {

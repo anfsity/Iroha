@@ -1,10 +1,14 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Logger, sanitizeContext, serializeError } from "../src/logger.js";
 
 const temporaryDirectories: string[] = [];
+
+function stripAnsi(value: string): string {
+  return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+}
 
 afterEach(async () => {
   await Promise.all(
@@ -15,6 +19,84 @@ afterEach(async () => {
 });
 
 describe("structured logger", () => {
+  it("renders the record time and log level for human terminal output", () => {
+    let output = "";
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(((
+      chunk: string | Uint8Array,
+    ) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write);
+
+    try {
+      const logger = new Logger();
+      logger.info("test", "download.succeeded", "Completed", {
+        async: { phase: "success" },
+      });
+    } finally {
+      write.mockRestore();
+    }
+
+    expect(stripAnsi(output)).toMatch(
+      /^\d{2}:\d{2}:\d{2} INFO\s+\[test\].*DONE/,
+    );
+  });
+
+  it("keeps the colored log level valid in a TTY", () => {
+    let output = "";
+    const previousIsTTY = process.stdout.isTTY;
+    process.stdout.isTTY = true;
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(((
+      chunk: string | Uint8Array,
+    ) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write);
+
+    try {
+      const logger = new Logger();
+      logger.info("test", "download.succeeded", "Completed", {
+        async: { phase: "success" },
+      });
+    } finally {
+      write.mockRestore();
+      process.stdout.isTTY = previousIsTTY;
+    }
+
+    expect(output).toContain("\u001B[32mINFO");
+    expect(output).not.toContain("\u001B[32MINFO");
+  });
+
+  it("keeps queued and running records in the structured file only", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "iroha-logger-"));
+    temporaryDirectories.push(directory);
+    const filePath = path.join(directory, "iroha.jsonl");
+    let output = "";
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(((
+      chunk: string | Uint8Array,
+    ) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stdout.write);
+
+    try {
+      const logger = new Logger({ filePath });
+      logger.info("test", "download.started", "Started", {
+        async: { phase: "running" },
+      });
+      await logger.flush();
+    } finally {
+      write.mockRestore();
+    }
+
+    expect(output).toBe("");
+    const [line] = (await readFile(filePath, "utf8")).trim().split("\n");
+    expect(JSON.parse(line!)).toMatchObject({
+      event: "download.started",
+      async: { phase: "running" },
+    });
+  });
+
   it("emits the complete record and keeps async correlation ids", () => {
     const logger = new Logger({ terminal: false });
     const record = logger.info("downloader", "download.started", "Started", {
