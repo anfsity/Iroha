@@ -1,8 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  getUgoiraGifFilename,
-  isUgoiraFormat,
-} from "../src/ugoira.js";
+import { getUgoiraGifFilename, isUgoiraFormat } from "../src/ugoira.js";
 
 describe("ugoira output", () => {
   test("maps ZIP output to GIF output", () => {

@@ -2,19 +2,15 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  Logger,
-  sanitizeContext,
-  serializeError,
-} from "../src/logger.js";
+import { Logger, sanitizeContext, serializeError } from "../src/logger.js";
 
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -127,7 +123,10 @@ describe("structured logger", () => {
 
     logger.info("test", "first", "first");
     logger.error("test", "second", "second", {
-      error: Object.assign(new Error("failed"), { code: "E_TEST", status: 503 }),
+      error: Object.assign(new Error("failed"), {
+        code: "E_TEST",
+        status: 503,
+      }),
     });
     await logger.flush();
 

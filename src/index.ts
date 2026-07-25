@@ -153,9 +153,14 @@ export default class Pixiv {
       Illustrator.setPixiv(this.pixiv);
       Illust.setPixiv(this.pixiv);
     } catch (err: any) {
-      logger.error("auth", "refresh.failed", "Initial Pixiv login refresh failed", {
-        error: err,
-      });
+      logger.error(
+        "auth",
+        "refresh.failed",
+        "Initial Pixiv login refresh failed",
+        {
+          error: err,
+        },
+      );
       return false;
     }
 
@@ -163,7 +168,11 @@ export default class Pixiv {
       try {
         if (this.pixiv) {
           await this.pixiv.refreshAccessToken(refresh_token);
-          logger.info("auth", "refresh.succeeded", "Automatic token renewal succeeded");
+          logger.info(
+            "auth",
+            "refresh.succeeded",
+            "Automatic token renewal succeeded",
+          );
         }
       } catch (err: any) {
         logger.warn(
@@ -250,10 +259,15 @@ export default class Pixiv {
       try {
         await Downloader.downloadByIllustrators([new Illustrator(uid)]);
       } catch (error) {
-        logger.error("downloader", "illustrator.failed", "Illustrator download failed", {
-          context: { uid },
-          error,
-        });
+        logger.error(
+          "downloader",
+          "illustrator.failed",
+          "Illustrator download failed",
+          {
+            context: { uid },
+            error,
+          },
+        );
       }
     }
   }
@@ -358,10 +372,15 @@ export default class Pixiv {
         const json = await this.pixiv.illustDetail(normalizedPid);
         jsons.push(json.illust);
       } catch (error) {
-        logger.warn("pixiv", "illust.not_found", "Illustration does not exist", {
-          context: { pid: normalizedPid },
-          error,
-        });
+        logger.warn(
+          "pixiv",
+          "illust.not_found",
+          "Illustration does not exist",
+          {
+            context: { pid: normalizedPid },
+            error,
+          },
+        );
       }
     }
     await Downloader.downloadByIllusts(jsons);

@@ -542,9 +542,7 @@ async function handleSettingUgoiraFormat(config: any): Promise<void> {
         { title: "GIF only", value: "gif" },
         { title: "GIF and ZIP", value: "both" },
       ],
-      initial: ["zip", "gif", "both"].indexOf(
-        config.download.ugoiraFormat,
-      ),
+      initial: ["zip", "gif", "both"].indexOf(config.download.ugoiraFormat),
     },
     { onCancel },
   );

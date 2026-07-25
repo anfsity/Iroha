@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
+    "format": "prettier --write --ignore-unknown .",
+    "format:check": "prettier --check --ignore-unknown .",
     "test": "vitest run"
   },
   "keywords": [],
@@ -29,6 +31,7 @@
     "@types/qs": "^6.15.1",
     "@types/readline-sync": "^1.4.8",
     "esbuild": "^0.28.1",
+    "prettier": "3.7.3",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"

@@ -14,3 +14,5 @@
 !tests/
 !assets/
 !.github
+!.githooks/
+!.githooks/pre-commit

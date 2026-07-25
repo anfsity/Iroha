@@ -23,9 +23,7 @@ export interface ProtocolConfig {
 
 const defaultConfig: ProtocolConfig = { registered: false, port: 0 };
 
-function writeConfig(
-  config: ProtocolConfig = defaultConfig,
-): ProtocolConfig {
+function writeConfig(config: ProtocolConfig = defaultConfig): ProtocolConfig {
   fse.ensureDirSync(CONFIG_FILE_DIR);
   fse.writeJsonSync(CONFIG_FILE, config);
   return config;

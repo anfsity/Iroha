@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+prettier="$repo_root/node_modules/.bin/prettier"
+if [ ! -x "$prettier" ]; then
+  echo "pre-commit: Prettier is not installed; run pnpm install first" >&2
+  exit 1
+fi
+
+staged_files=$(mktemp)
+trap 'rm -f "$staged_files"' EXIT INT TERM
+
+git diff --cached --name-only --diff-filter=ACMR -z -- >"$staged_files"
+if [ ! -s "$staged_files" ]; then
+  exit 0
+fi
+
+xargs -0 "$prettier" --write --ignore-unknown -- <"$staged_files"
+xargs -0 git add -- <"$staged_files"

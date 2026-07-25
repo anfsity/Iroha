@@ -5,9 +5,8 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import appState from "../src/appState.js";
 
 vi.mock("../src/utils.js", async () => {
-  const actual = await vi.importActual<typeof import("../src/utils.js")>(
-    "../src/utils.js",
-  );
+  const actual =
+    await vi.importActual<typeof import("../src/utils.js")>("../src/utils.js");
 
   return {
     ...actual,
@@ -58,9 +57,9 @@ describe("download format handling", () => {
     );
 
     expect(mockedDownload).toHaveBeenCalledTimes(1);
-    await expect(fse.readFile(path.join(outputDir, filename), "utf8")).resolves.toBe(
-      "image",
-    );
+    await expect(
+      fse.readFile(path.join(outputDir, filename), "utf8"),
+    ).resolves.toBe("image");
     await expect(
       fse.pathExists(path.join(outputDir, "(123)sample.gif")),
     ).resolves.toBe(false);

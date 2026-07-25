@@ -97,30 +97,40 @@ async function finalizeUgoira(
   if (!(await fse.pathExists(gifPath))) {
     const operationId = logger.createOperationId("ugoira-convert");
     const startedAt = Date.now();
-    logger.info("ugoira", "conversion.started", "Ugoira GIF conversion started", {
-      context: { ...getIllustContext(illust), zipPath, gifPath },
-      async: {
-        operationId,
-        taskId: getTaskId(illust),
-        phase: "running",
-      },
-    });
-    try {
-      await convertUgoiraToGif(zipPath, gifPath, illust.ugoiraFrames);
-      logger.info("ugoira", "conversion.succeeded", "Ugoira GIF conversion succeeded", {
-        context: {
-          ...getIllustContext(illust),
-          zipPath,
-          gifPath,
-          durationMs: Date.now() - startedAt,
-        },
+    logger.info(
+      "ugoira",
+      "conversion.started",
+      "Ugoira GIF conversion started",
+      {
+        context: { ...getIllustContext(illust), zipPath, gifPath },
         async: {
           operationId,
           taskId: getTaskId(illust),
-          phase: "success",
-          durationMs: Date.now() - startedAt,
+          phase: "running",
         },
-      });
+      },
+    );
+    try {
+      await convertUgoiraToGif(zipPath, gifPath, illust.ugoiraFrames);
+      logger.info(
+        "ugoira",
+        "conversion.succeeded",
+        "Ugoira GIF conversion succeeded",
+        {
+          context: {
+            ...getIllustContext(illust),
+            zipPath,
+            gifPath,
+            durationMs: Date.now() - startedAt,
+          },
+          async: {
+            operationId,
+            taskId: getTaskId(illust),
+            phase: "success",
+            durationMs: Date.now() - startedAt,
+          },
+        },
+      );
     } catch (error) {
       logger.error(
         "ugoira",
@@ -148,10 +158,15 @@ async function finalizeUgoira(
 
   if (appState.ugoiraFormat === "gif") {
     await fse.remove(zipPath);
-    logger.debug("ugoira", "archive.removed", "Removed ZIP after GIF conversion", {
-      context: { ...getIllustContext(illust), zipPath },
-      async: { taskId: getTaskId(illust), phase: "success" },
-    });
+    logger.debug(
+      "ugoira",
+      "archive.removed",
+      "Removed ZIP after GIF conversion",
+      {
+        context: { ...getIllustContext(illust), zipPath },
+        async: { taskId: getTaskId(illust), phase: "success" },
+      },
+    );
   }
   return true;
 }
@@ -341,15 +356,20 @@ export async function downloadIllusts(
       destination: dldir,
     };
 
-    logger.info("downloader", "download.queued", "Illustration queued for download", {
-      context: taskContext,
-      async: {
-        operationId,
-        taskId,
-        workerId: String(threadID),
-        phase: "queued",
+    logger.info(
+      "downloader",
+      "download.queued",
+      "Illustration queued for download",
+      {
+        context: taskContext,
+        async: {
+          operationId,
+          taskId,
+          workerId: String(threadID),
+          phase: "queued",
+        },
       },
-    });
+    );
 
     // A ZIP may already be complete while its requested GIF output is not.
     // Convert it in place instead of downloading the archive again.
@@ -362,7 +382,12 @@ export async function downloadIllusts(
           "Using an existing ugoira ZIP",
           {
             context: { ...taskContext, existingZip },
-            async: { operationId, taskId, workerId: String(threadID), phase: "running" },
+            async: {
+              operationId,
+              taskId,
+              workerId: String(threadID),
+              phase: "running",
+            },
           },
         );
         await finalizeUgoira(illust, path.join(dldir, existingZip), dldir);
@@ -419,24 +444,19 @@ export async function downloadIllusts(
       );
 
       try {
-        const res = await utils.download(
-          tempDir,
-          illust.file,
-          illust.url,
-          {
-            ...options,
-            log: {
-              context: { pid: illust.id, filename: illust.file, attempt },
-              async: {
-                operationId,
-                taskId,
-                workerId: String(threadID),
-                attempt,
-                phase: "running",
-              },
+        const res = await utils.download(tempDir, illust.file, illust.url, {
+          ...options,
+          log: {
+            context: { pid: illust.id, filename: illust.file, attempt },
+            async: {
+              operationId,
+              taskId,
+              workerId: String(threadID),
+              attempt,
+              phase: "running",
             },
           },
-        );
+        });
 
         const contentRange = res.headers["content-range"];
         const rangeMatch =
@@ -605,7 +625,12 @@ export async function downloadIllusts(
                   continuousErrors: continuousErr,
                   hangupMs: hangup,
                 },
-                async: { operationId, taskId, workerId: String(threadID), phase: "waiting" },
+                async: {
+                  operationId,
+                  taskId,
+                  workerId: String(threadID),
+                  phase: "waiting",
+                },
               },
             );
             setTimeout(() => {
@@ -676,15 +701,25 @@ async function getIllustratorNewDir(data: {
   ) {
     try {
       await fse.rename(path.join(mainDir, dldir), path.join(mainDir, dldirNew));
-      logger.info("downloader", "directory.renamed", "Download directory renamed", {
-        context: { from: dldir, to: dldirNew },
-      });
+      logger.info(
+        "downloader",
+        "directory.renamed",
+        "Download directory renamed",
+        {
+          context: { from: dldir, to: dldirNew },
+        },
+      );
       dldir = dldirNew;
     } catch (err) {
-      logger.warn("downloader", "directory.rename_failed", "Download directory rename failed", {
-        context: { from: dldir, to: dldirNew },
-        error: err,
-      });
+      logger.warn(
+        "downloader",
+        "directory.rename_failed",
+        "Download directory rename failed",
+        {
+          context: { from: dldir, to: dldirNew },
+          error: err,
+        },
+      );
     }
   }
 
@@ -692,9 +727,14 @@ async function getIllustratorNewDir(data: {
 }
 
 export async function downloadByIllusts(illustJSON: any[]): Promise<void> {
-  logger.info("downloader", "metadata.collection_started", "Collecting illustration metadata", {
-    context: { count: illustJSON.length },
-  });
+  logger.info(
+    "downloader",
+    "metadata.collection_started",
+    "Collecting illustration metadata",
+    {
+      context: { count: illustJSON.length },
+    },
+  );
   // Network requests are sent in parallel only when requesting a ugoira.
   const results = await Promise.all(
     illustJSON.map((json) =>
@@ -703,12 +743,17 @@ export async function downloadByIllusts(illustJSON: any[]): Promise<void> {
   );
   const dldir = path.join(config.path!, "PID");
   const illusts = await filterMissingIllusts(results.flat(), dldir);
-  logger.info("downloader", "metadata.collection_completed", "Illustration metadata collected", {
-    context: {
-      requested: results.flat().length,
-      missing: illusts.length,
-      skipped: results.flat().length - illusts.length,
+  logger.info(
+    "downloader",
+    "metadata.collection_completed",
+    "Illustration metadata collected",
+    {
+      context: {
+        requested: results.flat().length,
+        missing: illusts.length,
+        skipped: results.flat().length - illusts.length,
+      },
     },
-  });
+  );
   await downloadIllusts(illusts, dldir, config.thread);
 }

@@ -37,7 +37,6 @@ import moment from "moment";
 import { sleep } from "./utils.js";
 import logger from "./logger.js";
 
-
 const BASE_URL: string = "https://app-api.pixiv.net";
 const CLIENT_ID: string = "MOBrBDS8blbauoSck0ZfDbtuzpyT";
 const CLIENT_SECRET: string = "lsACyCD94FhDUtGTXi3QzcFE2uU1hqtDaKeqrdwj";
@@ -78,19 +77,24 @@ async function callApi(
 
   try {
     const res = await instance(finalUrl, options);
-    logger.debug("pixiv-api", "request.succeeded", "Pixiv API request succeeded", {
-      context: {
-        method: options.method || "GET",
-        url: finalUrl,
-        status: res.status,
-        durationMs: Date.now() - startedAt,
+    logger.debug(
+      "pixiv-api",
+      "request.succeeded",
+      "Pixiv API request succeeded",
+      {
+        context: {
+          method: options.method || "GET",
+          url: finalUrl,
+          status: res.status,
+          durationMs: Date.now() - startedAt,
+        },
+        async: {
+          operationId,
+          phase: "success",
+          durationMs: Date.now() - startedAt,
+        },
       },
-      async: {
-        operationId,
-        phase: "success",
-        durationMs: Date.now() - startedAt,
-      },
-    });
+    );
     return res.data;
   } catch (rawErr: any) {
     const err = rawErr as AxiosError<any>;
@@ -170,15 +174,20 @@ async function callApi(
         throw err;
       }
 
-      logger.warn("pixiv-api", "request.retrying", "Retrying Pixiv API request", {
-        context: { ...baseContext, retryRemaining: retry },
-        async: {
-          operationId,
-          phase: "retrying",
-          attempt: 2 - retry + 1,
+      logger.warn(
+        "pixiv-api",
+        "request.retrying",
+        "Retrying Pixiv API request",
+        {
+          context: { ...baseContext, retryRemaining: retry },
+          async: {
+            operationId,
+            phase: "retrying",
+            attempt: 2 - retry + 1,
+          },
+          error: err,
         },
-        error: err,
-      });
+      );
       await sleep(1000);
 
       return callApi(url, options, retry - 1, instance, operationId);
@@ -353,10 +362,7 @@ export class PixivApi {
     return this.requestUrl(`/v1/search/illust?${queryString}`);
   }
 
-  public searchIllustPopularPreview(
-    word: string,
-    options?: PixivOptions,
-  ) {
+  public searchIllustPopularPreview(word: string, options?: PixivOptions) {
     if (!word) return Promise.reject(new Error("word required"));
     const queryString = qs.stringify(
       Object.assign({ word, search_target: "partial_match_for_tags" }, options),
@@ -375,10 +381,7 @@ export class PixivApi {
     return this.requestUrl(`/v1/search/novel?${queryString}`);
   }
 
-  public searchNovelPopularPreview(
-    word: string,
-    options?: PixivOptions,
-  ) {
+  public searchNovelPopularPreview(word: string, options?: PixivOptions) {
     if (!word) return Promise.reject(new Error("word required"));
     const queryString = qs.stringify(
       Object.assign({ word, search_target: "partial_match_for_tags" }, options),
@@ -386,10 +389,7 @@ export class PixivApi {
     return this.requestUrl(`/v1/search/popular-preview/novel?${queryString}`);
   }
 
-  public searchIllustBookmarkRanges(
-    word: string,
-    options?: PixivOptions,
-  ) {
+  public searchIllustBookmarkRanges(word: string, options?: PixivOptions) {
     if (!word) return Promise.reject(new Error("word required"));
     const queryString = qs.stringify(
       Object.assign({ word, search_target: "partial_match_for_tags" }, options),
@@ -397,10 +397,7 @@ export class PixivApi {
     return this.requestUrl(`/v1/search/bookmark-ranges/illust?${queryString}`);
   }
 
-  public searchNovelBookmarkRanges(
-    word: string,
-    options?: PixivOptions,
-  ) {
+  public searchNovelBookmarkRanges(word: string, options?: PixivOptions) {
     if (!word) return Promise.reject(new Error("word required"));
     const queryString = qs.stringify(
       Object.assign({ word, search_target: "partial_match_for_tags" }, options),
@@ -441,10 +438,7 @@ export class PixivApi {
     return this.requestUrl(`/v1/user/novels?${queryString}`);
   }
 
-  public userBookmarksIllust(
-    id: number | string,
-    options?: PixivOptions,
-  ) {
+  public userBookmarksIllust(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(
       Object.assign({ user_id: id, restrict: "public" }, options),
@@ -459,19 +453,13 @@ export class PixivApi {
     return this.requestUrl(`/v1/user/bookmark-tags/illust?${queryString}`);
   }
 
-  public illustBookmarkDetail(
-    id: number | string,
-    options?: PixivOptions,
-  ) {
+  public illustBookmarkDetail(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("illust_id required"));
     const queryString = qs.stringify(Object.assign({ illust_id: id }, options));
     return this.requestUrl(`/v2/illust/bookmark/detail?${queryString}`);
   }
 
-  public userBookmarksNovel(
-    id: number | string,
-    options?: PixivOptions,
-  ) {
+  public userBookmarksNovel(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(
       Object.assign({ user_id: id, restrict: "public" }, options),
@@ -762,10 +750,7 @@ export class PixivApi {
     return this.requestUrl(`/v1/novel/ranking?${queryString}`);
   }
 
-  public novelBookmarkDetail(
-    id: number | string,
-    options?: PixivOptions,
-  ) {
+  public novelBookmarkDetail(id: number | string, options?: PixivOptions) {
     if (!id) return Promise.reject(new Error("novel_id required"));
     const queryString = qs.stringify(Object.assign({ novel_id: id }, options));
     return this.requestUrl(`/v2/novel/bookmark/detail?${queryString}`);

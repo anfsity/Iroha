@@ -242,10 +242,15 @@ export async function convertUgoiraToGif(
   const operationId = logger.createOperationId("ugoira");
   const startedAt = Date.now();
 
-  logger.debug("ugoira", "converter.started", "ImageMagick conversion started", {
-    context: { zipPath, gifPath, metadataFrames: metadata?.length ?? null },
-    async: { operationId, phase: "running" },
-  });
+  logger.debug(
+    "ugoira",
+    "converter.started",
+    "ImageMagick conversion started",
+    {
+      context: { zipPath, gifPath, metadataFrames: metadata?.length ?? null },
+      async: { operationId, phase: "running" },
+    },
+  );
 
   try {
     const frames = await prepareFrames(zipPath, workDir, metadata);
@@ -269,24 +274,34 @@ export async function convertUgoiraToGif(
 
     await fse.ensureDir(path.dirname(gifPath));
     await fse.move(temporaryGif, gifPath, { overwrite: true });
-    logger.debug("ugoira", "converter.succeeded", "ImageMagick conversion completed", {
-      context: { zipPath, gifPath, durationMs: Date.now() - startedAt },
-      async: {
-        operationId,
-        phase: "success",
-        durationMs: Date.now() - startedAt,
+    logger.debug(
+      "ugoira",
+      "converter.succeeded",
+      "ImageMagick conversion completed",
+      {
+        context: { zipPath, gifPath, durationMs: Date.now() - startedAt },
+        async: {
+          operationId,
+          phase: "success",
+          durationMs: Date.now() - startedAt,
+        },
       },
-    });
+    );
   } catch (error) {
-    logger.debug("ugoira", "converter.failed", "ImageMagick conversion failed", {
-      context: { zipPath, gifPath, durationMs: Date.now() - startedAt },
-      async: {
-        operationId,
-        phase: "failed",
-        durationMs: Date.now() - startedAt,
+    logger.debug(
+      "ugoira",
+      "converter.failed",
+      "ImageMagick conversion failed",
+      {
+        context: { zipPath, gifPath, durationMs: Date.now() - startedAt },
+        async: {
+          operationId,
+          phase: "failed",
+          durationMs: Date.now() - startedAt,
+        },
+        error,
       },
-      error,
-    });
+    );
     throw error;
   } finally {
     await fse.remove(temporaryGif);
