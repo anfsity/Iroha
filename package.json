@@ -1,8 +1,8 @@
 {
-  "name": "iroha",
-  "version": "1.0.1",
+  "name": "@anfsity/iroha",
+  "version": "1.0.2",
   "description": "",
-  "main": "index.js",
+  "main": "",
   "scripts": {
     "build": "tsc",
     "format": "prettier --write --ignore-unknown .",
