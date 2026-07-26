@@ -299,9 +299,6 @@ importers:
       qs:
         specifier: ^6.15.3
         version: 6.15.3
-      readline-sync:
-        specifier: ^1.4.10
-        version: 1.4.10
     devDependencies:
       "@types/blueimp-md5":
         specifier: ^2.18.2
@@ -318,9 +315,6 @@ importers:
       "@types/qs":
         specifier: ^6.15.1
         version: 6.15.1
-      "@types/readline-sync":
-        specifier: ^1.4.8
-        version: 1.4.8
       esbuild:
         specifier: ^0.28.1
         version: 0.28.1
@@ -821,12 +815,6 @@ packages:
     resolution:
       {
         integrity: sha512-GZHUBZR9hckSUhrxmp1nG6NwdpM9fCunJwyThLW1X3AyHgd9IlHb6VANpQQqDr2o/qQp6McZ3y/IA2rVzKzSbw==,
-      }
-
-  "@types/readline-sync@1.4.8":
-    resolution:
-      {
-        integrity: sha512-BL7xOf0yKLA6baAX6MMOnYkoflUyj/c7y3pqMRfU0va7XlwHAOTOIo4x55P/qLfMsuaYdJJKubToLqRVmRtRZA==,
       }
 
   "@vitest/expect@4.1.10":
@@ -1635,13 +1623,6 @@ packages:
         integrity: sha512-zQxXmQMrEoD3S+jQdYsloq4qAuaxKFHZj6hHqOYGwB2iQZH+q9e/lf5zQPXCKOk0WJuAjzRFbO4KwHIp2D05Iw==,
       }
 
-  readline-sync@1.4.10:
-    resolution:
-      {
-        integrity: sha512-gNva8/6UAe8QYepIQH/jQ2qn91Qj0B9sYjMBBs3QOB8F2CXcKgLxQaJRP76sWVRQt+QU+8fAkCbCvjjMFu7Ycw==,
-      }
-    engines: { node: ">= 0.8.0" }
-
   rolldown@1.1.4:
     resolution:
       {
@@ -2113,8 +2094,6 @@ snapshots:
 
   "@types/qs@6.15.1": {}
 
-  "@types/readline-sync@1.4.8": {}
-
   "@vitest/expect@4.1.10":
     dependencies:
       "@standard-schema/spec": 1.1.0
@@ -2579,8 +2558,6 @@ snapshots:
       side-channel: 1.1.1
 
   quickjs-wasi@2.2.0: {}
-
-  readline-sync@1.4.10: {}
 
   rolldown@1.1.4:
     dependencies:
