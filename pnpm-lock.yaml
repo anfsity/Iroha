@@ -272,9 +272,6 @@ importers:
       commander:
         specifier: ^15.0.0
         version: 15.0.0
-      dotenv:
-        specifier: ^17.4.2
-        version: 17.4.2
       fs-extra:
         specifier: ^11.3.6
         version: 11.3.6
@@ -315,15 +312,9 @@ importers:
       "@types/qs":
         specifier: ^6.15.1
         version: 6.15.1
-      esbuild:
-        specifier: ^0.28.1
-        version: 0.28.1
       prettier:
         specifier: 3.7.3
         version: 3.7.3
-      tsx:
-        specifier: ^4.23.0
-        version: 4.23.0
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -1037,13 +1028,6 @@ packages:
         integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==,
       }
     engines: { node: ">=8" }
-
-  dotenv@17.4.2:
-    resolution:
-      {
-        integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==,
-      }
-    engines: { node: ">=12" }
 
   dunder-proto@1.0.1:
     resolution:
@@ -2217,8 +2201,6 @@ snapshots:
 
   detect-libc@2.1.2: {}
 
-  dotenv@17.4.2: {}
-
   dunder-proto@1.0.1:
     dependencies:
       call-bind-apply-helpers: 1.0.2
@@ -2270,6 +2252,7 @@ snapshots:
       "@esbuild/win32-arm64": 0.28.1
       "@esbuild/win32-ia32": 0.28.1
       "@esbuild/win32-x64": 0.28.1
+    optional: true
 
   escodegen@2.1.0:
     dependencies:
@@ -2656,6 +2639,7 @@ snapshots:
       esbuild: 0.28.1
     optionalDependencies:
       fsevents: 2.3.3
+    optional: true
 
   typescript@6.0.3: {}
 

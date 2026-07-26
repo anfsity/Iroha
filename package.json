@@ -1,6 +1,6 @@
 {
   "name": "@anfsity/iroha",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "",
   "main": "",
   "scripts": {
@@ -29,9 +29,7 @@
     "@types/node": "^26.1.0",
     "@types/prompts": "^2.4.9",
     "@types/qs": "^6.15.1",
-    "esbuild": "^0.28.1",
     "prettier": "3.7.3",
-    "tsx": "^4.23.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   },
@@ -40,7 +38,6 @@
     "blueimp-md5": "^2.19.0",
     "colors": "^1.4.0",
     "commander": "^15.0.0",
-    "dotenv": "^17.4.2",
     "fs-extra": "^11.3.6",
     "js-base64": "^3.8.1",
     "moment": "^2.30.1",
