@@ -18,6 +18,7 @@ import open from "open";
 import pkg from "../package.json" with { type: "json" };
 import { getAppDataPath } from "./utils.js";
 import { isUgoiraFormat } from "./ugoira.js";
+import { isImageSource } from "./pixiv-image-url.js";
 
 const onCancel = () => {
   logger.info("cli", "prompt.cancelled", "Operation cancelled");
@@ -438,6 +439,14 @@ async function handleSettings(config: any): Promise<void> {
         value: "ugoiraFormat",
       },
       {
+        title:
+          `Image source: `.yellow +
+          (config.imageSource === "pixivcat"
+            ? "PixivCat (i.pixiv.cat)"
+            : "Direct (i.pximg.net)"),
+        value: "imageSource",
+      },
+      {
         title: `Proxy: `.yellow + (config.proxy || "From env vars"),
         value: "proxy",
       },
@@ -471,6 +480,9 @@ async function handleSettings(config: any): Promise<void> {
         break;
       case "ugoiraFormat":
         await handleSettingUgoiraFormat(config);
+        break;
+      case "imageSource":
+        await handleSettingImageSource(config);
         break;
       case "proxy":
         await handleSettingProxy(config);
@@ -549,6 +561,26 @@ async function handleSettingUgoiraFormat(config: any): Promise<void> {
 
   if (isUgoiraFormat(value)) {
     config.download.ugoiraFormat = value;
+  }
+}
+
+async function handleSettingImageSource(config: any): Promise<void> {
+  const { value } = await prompts(
+    {
+      type: "select",
+      name: "value",
+      message: "Image source:",
+      choices: [
+        { title: "Direct (i.pximg.net)", value: "direct" },
+        { title: "PixivCat (i.pixiv.cat)", value: "pixivcat" },
+      ],
+      initial: config.imageSource === "pixivcat" ? 1 : 0,
+    },
+    { onCancel },
+  );
+
+  if (isImageSource(value)) {
+    config.imageSource = value;
   }
 }
 

@@ -14,6 +14,7 @@ import Illust from "./illustration.js";
 import Illustrator from "./illustrator.js";
 import appState from "./appState.js";
 import logger from "./logger.js";
+import { isImageSource, type ImageSource } from "./pixiv-image-url.js";
 
 const CONFIG_FILE_DIR: string = utils.getAppDataPath("iroha");
 const CONFIG_FILE = path.resolve(CONFIG_FILE_DIR, "config.json");
@@ -22,6 +23,7 @@ interface AppConfig {
   download: DownloadConfig;
   refresh_token?: string | null;
   proxy?: string | null;
+  imageSource: ImageSource;
 }
 
 const defaultConfig: AppConfig = {
@@ -30,6 +32,7 @@ const defaultConfig: AppConfig = {
     timeout: 30,
     ugoiraFormat: "zip",
   },
+  imageSource: "direct",
 } as const;
 
 let __config: AppConfig;
@@ -61,6 +64,9 @@ export default class Pixiv {
       ...defaultConfig.download,
       ...config.download,
     };
+    config.imageSource = isImageSource(config.imageSource)
+      ? config.imageSource
+      : defaultConfig.imageSource;
 
     return config;
   }
@@ -99,6 +105,7 @@ export default class Pixiv {
   static async applyConfig(config?: AppConfig): Promise<void> {
     const targetConfig = config || (await this.readConfig());
     __config = targetConfig;
+    appState.imageSource = targetConfig.imageSource ?? "direct";
     targetConfig.download.tmp = path.join(CONFIG_FILE_DIR, "tmp");
     Downloader.setConfig(targetConfig.download);
     await this.applyProxyConfig(targetConfig);

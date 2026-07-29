@@ -6,6 +6,7 @@
 import type PixivApi from "./pixiv-api-client.js";
 import appState from "./appState.js";
 import logger from "./logger.js";
+import { replacePixivImageUrl } from "./pixiv-image-url.js";
 
 interface IllustObject {
   id: number | string;
@@ -53,9 +54,12 @@ export class Illust {
 
     if (illustJSON.type === "ugoira") {
       const originalUrl = illustJSON.meta_single_page.original_image_url || "";
-      const zipUrl = originalUrl
-        .replace("img-original", "img-zip-ugoira")
-        .replace(/_ugoira0\.(.*)/, "_ugoira1920x1080.zip");
+      const zipUrl = replacePixivImageUrl(
+        originalUrl
+          .replace("img-original", "img-zip-ugoira")
+          .replace(/_ugoira0\.(.*)/, "_ugoira1920x1080.zip"),
+        appState.imageSource,
+      );
 
       if (appState.ugoiraMeta) {
         try {
@@ -92,7 +96,10 @@ export class Illust {
       }
     } else if (illustJSON.meta_pages.length > 0) {
       for (let i = 0; i < illustJSON.meta_pages.length; i++) {
-        const url = illustJSON.meta_pages[i]!.image_urls.original;
+        const url = replacePixivImageUrl(
+          illustJSON.meta_pages[i]!.image_urls.original,
+          appState.imageSource,
+        );
         const ext = url.substring(url.lastIndexOf("."));
         illusts.push(
           new Illust(
@@ -104,7 +111,10 @@ export class Illust {
         );
       }
     } else if (illustJSON.meta_single_page.original_image_url) {
-      const url = illustJSON.meta_single_page.original_image_url;
+      const url = replacePixivImageUrl(
+        illustJSON.meta_single_page.original_image_url,
+        appState.imageSource,
+      );
       const ext = url.substring(url.lastIndexOf("."));
       illusts.push(new Illust(id, title, url, `(${id})${fileName}${ext}`));
     }
