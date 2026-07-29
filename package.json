@@ -1,6 +1,6 @@
 {
   "name": "@anfsity/iroha",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "A terminal Pixiv illustration downloader",
   "main": "",
   "scripts": {
