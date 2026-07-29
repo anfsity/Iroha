@@ -1,8 +1,10 @@
 这个项目起于我心血来潮（~~闲的没事干~~）从上游 [pxder](https://github.com/Tsuk1ko/pxder) ts 重写而来，修复了一些 bug (?)。
 
-目前需要手动在终端中导入代理或者手动填入代理给 iroha，开 tun 是最方便的。
-
 ## 安装
+
+### 从 pnpm 拉取
+
+运行 `pnpm install -g @anfsity/iroha` 即可。
 
 ### 从 release 下载
 
@@ -57,6 +59,12 @@ Options:
 ```
 
 目前来说转化成 gif 需要依赖 Imagemagick，这个需要手动安装。
+
+## 网络
+
+目前需要手动在终端中导入代理或者手动填入代理给 iroha，开 tun 是最方便的。
+
+暂时添加了 [pixivcat](https://pixiv.cat/) 反向代理，不过请求用户信息之类的数据还是需要在能够正常访问 pixiv 的网络环境下才能获取。
 
 ## 日志
 
