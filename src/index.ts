@@ -5,195 +5,162 @@
 
 import fse from "fs-extra";
 import path from "node:path";
-
+import type { ProxyAgent } from "proxy-agent";
 import { getProxyAgent, delSysProxy } from "./proxy.js";
 import * as utils from "./utils.js";
 import PixivApi from "./pixiv-api-client.js";
-import * as Downloader from "./downloader.js";
+import {
+  downloadByBookmark,
+  downloadByIllusts,
+  downloadByIllustrators,
+  type DownloadContext,
+} from "./download-orchestrator.js";
 import Illust from "./illustration.js";
 import Illustrator from "./illustrator.js";
-import appState from "./appState.js";
+import {
+  CONFIG_FILE_DIR,
+  DEFAULT_CONFIG,
+  type AppConfig,
+  getIllustPolicy,
+  readConfig,
+  writeConfig,
+} from "./config.js";
+import type { IllustPolicy } from "./illust-policy.js";
 import logger from "./logger.js";
-import { isImageSource, type ImageSource } from "./pixiv-image-url.js";
 
-const CONFIG_FILE_DIR: string = utils.getAppDataPath("iroha");
-const CONFIG_FILE = path.resolve(CONFIG_FILE_DIR, "config.json");
-
-interface AppConfig {
-  download: DownloadConfig;
-  refresh_token?: string | null;
-  proxy?: string | null;
-  imageSource: ImageSource;
-  filterNsfw: boolean;
+interface FollowCacheEntry {
+  id: number | string;
+  name: string;
+  illusts: IllustObject[];
 }
 
-const defaultConfig: AppConfig = {
-  download: {
-    thread: 5,
-    timeout: 30,
-    ugoiraFormat: "zip",
-  },
-  imageSource: "direct",
-  filterNsfw: false,
-} as const;
+interface IllustObject {
+  id: number | string;
+  title: string;
+  url: string;
+  file: string;
+  ugoiraFrames?: UgoiraFrame[];
+}
 
-let __config: AppConfig;
+function deserializeIllust(data: IllustObject): Illust {
+  return new Illust(
+    data.id,
+    data.title,
+    data.url,
+    data.file,
+    data.ugoiraFrames,
+  );
+}
+
+function getRuntimeConfig(config: AppConfig): AppConfig {
+  return {
+    ...config,
+    download: {
+      ...config.download,
+      tmp: config.download.tmp ?? path.join(CONFIG_FILE_DIR, "tmp"),
+    },
+  };
+}
 
 export default class Pixiv {
   private pixiv: PixivApi = new PixivApi();
   private reloginInterval: NodeJS.Timeout | null = null;
   private followNextUrl: string | null = null;
+  private readonly config: AppConfig;
+  private readonly policy: IllustPolicy;
+  private readonly agent: ProxyAgent | null;
 
-  static async initConfig(forceInit: boolean = false): Promise<void> {
-    await fse.ensureDir(CONFIG_FILE_DIR);
-    const exists = await fse.pathExists(CONFIG_FILE);
-    if (!exists || forceInit) {
-      await fse.writeJson(CONFIG_FILE, defaultConfig);
-    }
+  constructor(
+    config: AppConfig = DEFAULT_CONFIG,
+    policy?: IllustPolicy,
+    agent: ProxyAgent | null = null,
+  ) {
+    this.config = getRuntimeConfig(config);
+    this.policy = policy ?? getIllustPolicy(config);
+    this.agent = agent;
   }
 
-  static async readConfig(): Promise<AppConfig> {
-    await this.initConfig();
-    const config: AppConfig = await (async () => {
-      try {
-        return await fse.readJSON(CONFIG_FILE);
-      } catch (err: any) {
-        return defaultConfig;
-      }
-    })();
-
-    config.download = {
-      ...defaultConfig.download,
-      ...config.download,
+  private get downloadContext(): DownloadContext {
+    return {
+      config: this.config.download,
+      policy: this.policy,
+      agent: this.agent,
     };
-    config.imageSource = isImageSource(config.imageSource)
-      ? config.imageSource
-      : defaultConfig.imageSource;
-    config.filterNsfw =
-      typeof config.filterNsfw === "boolean"
-        ? config.filterNsfw
-        : defaultConfig.filterNsfw;
-
-    return config;
   }
 
-  static async writeConfig(config: AppConfig): Promise<void> {
-    await fse.ensureDir(CONFIG_FILE_DIR);
-    await fse.writeJson(CONFIG_FILE, config);
-  }
-
-  static async checkConfig(config?: AppConfig): Promise<boolean> {
-    const targetConfig = config || (await this.readConfig());
-    let check: boolean = true;
-    if (!targetConfig.refresh_token) {
-      logger.error(
-        "config",
-        "auth.refresh_token.missing",
-        "You must login first",
-        { context: { command: "iroha --login" } },
-      );
-      check = false;
-    }
-
-    if (!targetConfig.download.path) {
-      logger.error(
-        "config",
-        "download.path.missing",
-        "You must set a download path first",
-        { context: { command: "iroha --setting" } },
-      );
-      check = false;
-    }
-
-    return check;
-  }
-
-  static async applyConfig(config?: AppConfig): Promise<void> {
-    const targetConfig = config || (await this.readConfig());
-    __config = targetConfig;
-    appState.imageSource = targetConfig.imageSource ?? "direct";
-    appState.filterNsfw = targetConfig.filterNsfw ?? false;
-    targetConfig.download.tmp = path.join(CONFIG_FILE_DIR, "tmp");
-    Downloader.setConfig(targetConfig.download);
-    await this.applyProxyConfig(targetConfig);
-  }
-
-  static async applyProxyConfig(config?: AppConfig): Promise<void> {
-    const targetConfig = config || (await this.readConfig());
-    const agent = getProxyAgent(targetConfig.proxy);
+  static async applyProxyConfig(config: AppConfig): Promise<ProxyAgent | null> {
+    const agent = getProxyAgent(config.proxy);
 
     // ProxyAgent reads environment variables when a request is made. Keep
     // them available when no explicit proxy is configured.
     const useSystemProxy =
-      targetConfig.proxy === "" ||
-      targetConfig.proxy === undefined ||
-      targetConfig.proxy === null;
+      config.proxy === "" ||
+      config.proxy === undefined ||
+      config.proxy === null;
     if (!useSystemProxy) delSysProxy();
 
-    if (agent) {
-      Downloader.setAgent(agent);
-      PixivApi.setAgent(agent);
-      appState.proxyAgent = agent;
-    }
+    if (agent) PixivApi.setAgent(agent);
+    return agent;
   }
 
-  static async login(code: string, code_verifier: string): Promise<void> {
+  static async login(code: string, codeVerifier: string): Promise<void> {
     const pixivApi = new PixivApi();
-    await pixivApi.tokenRequest(code, code_verifier);
-    const refresh_token = pixivApi.authInfo().refresh_token;
-    const config = await this.readConfig();
-    config.refresh_token = refresh_token;
-    await this.writeConfig(config);
+    await pixivApi.tokenRequest(code, codeVerifier);
+    const refreshToken = pixivApi.authInfo().refresh_token;
+    const config = await readConfig();
+    config.refresh_token = refreshToken;
+    await writeConfig(config);
   }
 
   static async loginByToken(token: string): Promise<void> {
     const pixivApi = new PixivApi();
     await pixivApi.refreshAccessToken(token);
-    const config = await this.readConfig();
+    const config = await readConfig();
     config.refresh_token = token;
-    await this.writeConfig(config);
+    await writeConfig(config);
   }
 
-  // FIXME: ... Perhaps the author really doesnt know how to write asynchronous programming :)
+  static async logout(): Promise<void> {
+    const config = await readConfig();
+    config.refresh_token = null;
+    await writeConfig(config);
+  }
+
+  // FIXME: Keep the access-token refresh loop alive while a download session runs.
   async relogin(): Promise<boolean> {
-    const config = await Pixiv.readConfig();
-    const refresh_token = config.refresh_token;
-    if (!refresh_token) return false;
+    const refreshToken = this.config.refresh_token;
+    if (!refreshToken) return false;
 
     this.clearReloginInterval();
 
     try {
-      await this.pixiv.refreshAccessToken(refresh_token);
+      await this.pixiv.refreshAccessToken(refreshToken);
       Illustrator.setPixiv(this.pixiv);
       Illust.setPixiv(this.pixiv);
-    } catch (err: any) {
+    } catch (error) {
       logger.error(
         "auth",
         "refresh.failed",
         "Initial Pixiv login refresh failed",
-        {
-          error: err,
-        },
+        { error },
       );
       return false;
     }
 
-    const refreshLoop = async () => {
+    const refreshLoop = async (): Promise<void> => {
       try {
-        if (this.pixiv) {
-          await this.pixiv.refreshAccessToken(refresh_token);
-          logger.info(
-            "auth",
-            "refresh.succeeded",
-            "Automatic token renewal succeeded",
-          );
-        }
-      } catch (err: any) {
+        await this.pixiv.refreshAccessToken(refreshToken);
+        logger.info(
+          "auth",
+          "refresh.succeeded",
+          "Automatic token renewal succeeded",
+        );
+      } catch (error) {
         logger.warn(
           "auth",
           "refresh.retry_scheduled",
           "Automatic renewal failed; a retry will be attempted next time",
-          { error: err },
+          { error },
         );
       } finally {
         if (this.reloginInterval) {
@@ -203,7 +170,6 @@ export default class Pixiv {
     };
 
     this.reloginInterval = setTimeout(refreshLoop, 40 * 60 * 1000);
-
     return true;
   }
 
@@ -214,56 +180,55 @@ export default class Pixiv {
     }
   }
 
-  static async logout(): Promise<void> {
-    const config = await this.readConfig();
-    config.refresh_token = null;
-    await this.writeConfig(config);
-  }
-
   async getMyFollow(isPrivate: boolean): Promise<Illustrator[]> {
     const follows: Illustrator[] = [];
     let next = this.followNextUrl;
 
-    const addToFollows = async (data: any) => {
+    const addToFollows = async (
+      data: PixivFollowingResponse,
+    ): Promise<void> => {
       next = data.next_url;
       for (const preview of data.user_previews) {
         if (preview.user.id !== 11) {
-          const tmp = new Illustrator(preview.user.id, preview.user.name);
-          await tmp.setExampleIllusts(preview.illusts);
-          follows.push(tmp);
+          const illustrator = new Illustrator(
+            preview.user.id,
+            preview.user.name,
+            [],
+            undefined,
+            this.policy,
+          );
+          await illustrator.setExampleIllusts(preview.illusts);
+          follows.push(illustrator);
         }
       }
     };
 
     if (next) {
-      await this.pixiv.requestUrl(next).then(addToFollows);
+      await addToFollows(
+        await this.pixiv.requestUrl<PixivFollowingResponse>(next),
+      );
     } else {
-      await this.pixiv
-        .userFollowing(this.pixiv.authInfo().user.id, {
+      await addToFollows(
+        await this.pixiv.userFollowing(this.pixiv.authInfo().user.id, {
           restrict: isPrivate ? "private" : "public",
-        })
-        .then(addToFollows);
+        }),
+      );
     }
 
     this.followNextUrl = next;
     return follows;
   }
 
-  hasNextFollow(): boolean {
-    return !!this.followNextUrl;
-  }
-
   async getAllMyFollow(isPrivate: boolean = false): Promise<Illustrator[]> {
     const follows: Illustrator[] = [];
-
     const processDisplay = utils.showProgress(() => follows.length);
-
-    do {
-      follows.push(...(await this.getMyFollow(isPrivate)));
-    } while (this.followNextUrl);
-
-    utils.clearProgress(processDisplay);
-
+    try {
+      do {
+        follows.push(...(await this.getMyFollow(isPrivate)));
+      } while (this.followNextUrl);
+    } finally {
+      utils.clearProgress(processDisplay);
+    }
     return follows;
   }
 
@@ -271,44 +236,52 @@ export default class Pixiv {
     const uidArray = Array.isArray(uids) ? uids : [uids];
     for (const uid of uidArray) {
       try {
-        await Downloader.downloadByIllustrators([new Illustrator(uid)]);
+        await downloadByIllustrators(
+          [new Illustrator(uid, "", [], undefined, this.policy)],
+          this.downloadContext,
+        );
       } catch (error) {
         logger.error(
           "downloader",
           "illustrator.failed",
           "Illustrator download failed",
-          {
-            context: { uid },
-            error,
-          },
+          { context: { uid }, error },
         );
       }
     }
   }
 
   async downloadBookmark(isPrivate: boolean = false): Promise<void> {
-    const me = new Illustrator(this.pixiv.authInfo().user.id);
-    await Downloader.downloadByBookmark(me, isPrivate);
+    const me = new Illustrator(
+      this.pixiv.authInfo().user.id,
+      "",
+      [],
+      undefined,
+      this.policy,
+    );
+    await downloadByBookmark(me, this.downloadContext, isPrivate);
   }
 
   async downloadFollowAll(isPrivate: boolean, force: boolean): Promise<void> {
-    let follows: any[] | null = null;
+    let follows: FollowCacheEntry[] | null = null;
     let illustrators: Illustrator[] | null = null;
-
     const tmpJson = path.join(
       CONFIG_FILE_DIR,
-      (isPrivate ? "private" : "public") + ".json",
+      `${isPrivate ? "private" : "public"}.json`,
     );
-    const tmpJsonExist = await fse.pathExists(tmpJson);
+    const tmpJsonExists = await fse.pathExists(tmpJson);
 
-    if (__config.download.path) {
-      await fse.ensureDir(__config.download.path);
+    if (this.config.download.path) {
+      await fse.ensureDir(this.config.download.path);
     }
 
     if (
-      !tmpJsonExist ||
+      !tmpJsonExists ||
       force ||
-      (tmpJsonExist && !(follows = await utils.readJsonSafely(tmpJson, null)))
+      !(follows = await utils.readJsonSafely<FollowCacheEntry[] | null>(
+        tmpJson,
+        null,
+      ))
     ) {
       logger.info(
         "pixiv",
@@ -317,55 +290,67 @@ export default class Pixiv {
         { context: { private: isPrivate } },
       );
       follows = [];
-      const ret = await this.getAllMyFollow(isPrivate);
-      illustrators = ret;
-      ret.forEach((illustrator) => {
-        follows!.push({
+      const collected = await this.getAllMyFollow(isPrivate);
+      illustrators = collected;
+      follows.push(
+        ...collected.map((illustrator) => ({
           id: illustrator.id,
           name: illustrator.name,
-          illusts: illustrator.exampleIllusts,
-        });
-      });
+          illusts: illustrator.exampleIllusts.map((illust) =>
+            illust.getObject(),
+          ),
+        })),
+      );
       await fse.ensureDir(CONFIG_FILE_DIR);
       await fse.writeJson(tmpJson, follows);
     }
 
     if (!illustrators && follows) {
-      illustrators = [];
-      for (const follow of follows) {
-        const tempI = new Illustrator(follow.id, follow.name);
-        tempI.exampleIllusts = follow.illusts;
-        illustrators.push(tempI);
-      }
-    }
-
-    if (illustrators) {
-      await Downloader.downloadByIllustrators(illustrators, async () => {
-        if (follows) {
-          follows.shift();
-          await fse.ensureDir(CONFIG_FILE_DIR);
-          await fse.writeJson(tmpJson, follows);
-        }
+      illustrators = follows.map((follow) => {
+        const illustrator = new Illustrator(
+          follow.id,
+          follow.name,
+          [],
+          undefined,
+          this.policy,
+        );
+        illustrator.exampleIllusts = follow.illusts.map(deserializeIllust);
+        return illustrator;
       });
     }
 
-    if (await fse.pathExists(tmpJson)) {
-      await fse.unlink(tmpJson);
+    if (illustrators) {
+      await downloadByIllustrators(
+        illustrators,
+        this.downloadContext,
+        async () => {
+          if (follows) {
+            follows.shift();
+            await fse.ensureDir(CONFIG_FILE_DIR);
+            await fse.writeJson(tmpJson, follows);
+          }
+        },
+      );
     }
+
+    if (await fse.pathExists(tmpJson)) await fse.unlink(tmpJson);
   }
 
   async downloadUpdate(): Promise<void> {
-    const uids: string[] = [];
-    if (!__config.download.path) return;
+    const downloadPath = this.config.download.path;
+    if (!downloadPath) return;
 
-    await fse.ensureDir(__config.download.path);
-    const files = await fse.readdir(__config.download.path);
-    for (const file of files) {
+    await fse.ensureDir(downloadPath);
+    const uids: string[] = [];
+    for (const file of await fse.readdir(downloadPath)) {
       const search = /^\(([0-9]+)\)/.exec(file);
-      if (search && search[1]) uids.push(search[1]);
+      if (search?.[1]) uids.push(search[1]);
     }
-    const illustrators: Illustrator[] = uids.map((uid) => new Illustrator(uid));
-    await Downloader.downloadByIllustrators(illustrators);
+
+    await downloadByIllustrators(
+      uids.map((uid) => new Illustrator(uid, "", [], undefined, this.policy)),
+      this.downloadContext,
+    );
   }
 
   static utils() {
@@ -373,11 +358,9 @@ export default class Pixiv {
   }
 
   async downloadByPIDs(pids: string[]): Promise<void> {
-    const jsons: any[] = [];
-    if (!__config.download.path) return;
-
-    const dirPath = path.join(__config.download.path, "PID");
-    await fse.ensureDir(dirPath);
+    if (!this.config.download.path) return;
+    const jsons: PixivIllustJSON[] = [];
+    await fse.ensureDir(path.join(this.config.download.path, "PID"));
 
     for (const pid of pids) {
       const normalizedPid = pid.trim();
@@ -390,13 +373,12 @@ export default class Pixiv {
           "pixiv",
           "illust.not_found",
           "Illustration does not exist",
-          {
-            context: { pid: normalizedPid },
-            error,
-          },
+          { context: { pid: normalizedPid }, error },
         );
       }
     }
-    await Downloader.downloadByIllusts(jsons);
+    await downloadByIllusts(jsons, this.downloadContext);
   }
 }
+
+export { getIllustPolicy };

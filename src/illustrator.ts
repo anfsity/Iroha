@@ -4,8 +4,8 @@
  */
 
 import pLimit from "p-limit";
-import appState from "./appState.js";
 import { isNsfwIllust } from "./illust-filter.js";
+import { DEFAULT_ILLUST_POLICY, type IllustPolicy } from "./illust-policy.js";
 import Illust from "./illustration.js";
 import PixivApi from "./pixiv-api-client.js";
 
@@ -21,6 +21,7 @@ export class Illustrator {
       illust: null,
       bookmark: null,
     },
+    public policy: IllustPolicy = DEFAULT_ILLUST_POLICY,
   ) {}
 
   public lastPageSkippedNsfw: boolean = false;
@@ -30,7 +31,7 @@ export class Illustrator {
     // Network requests are sent in parallel only when requesting a ugoira.
     const results = await Promise.all(
       pillustsJSON.map((json) =>
-        illustMetadataLimit(() => Illust.getIllusts(json)),
+        illustMetadataLimit(() => Illust.getIllusts(json, this.policy)),
       ),
     );
     this.exampleIllusts = results.flat();
@@ -78,14 +79,16 @@ export class Illustrator {
 
     const pageIllusts = json.illusts || [];
     this.lastPageSkippedNsfw =
-      appState.filterNsfw && pageIllusts.some(isNsfwIllust);
+      this.policy.filterNsfw && pageIllusts.some(isNsfwIllust);
 
     const result =
       pageIllusts.length > 0
         ? (
             await Promise.all(
               pageIllusts.map((illustJSON: PixivIllustJSON) =>
-                illustMetadataLimit(() => Illust.getIllusts(illustJSON)),
+                illustMetadataLimit(() =>
+                  Illust.getIllusts(illustJSON, this.policy),
+                ),
               ),
             )
           ).flat()

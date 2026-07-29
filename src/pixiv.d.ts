@@ -12,22 +12,42 @@ interface UgoiraFrame {
 interface UserData {
   id: number | string;
   name: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
-interface DownloadConfig {
-  thread: number;
-  timeout: number;
-  path?: string;
-  tmp?: string;
-  autoRename?: boolean;
-  ugoiraFormat?: "zip" | "gif" | "both";
+interface PixivAuthInfo {
+  access_token: string;
+  refresh_token: string;
+  user: UserData;
+  [key: string]: unknown;
+}
+
+interface PixivTokenResponse {
+  response: PixivAuthInfo;
+  [key: string]: unknown;
 }
 
 interface PixivIllustResponse {
-  illusts: any[];
+  illusts: PixivIllustJSON[];
   next_url: string | null;
-  [key: string]: any;
+  [key: string]: unknown;
+}
+
+interface PixivIllustDetailResponse {
+  illust: PixivIllustJSON;
+  [key: string]: unknown;
+}
+
+interface PixivUserPreview {
+  user: UserData;
+  illusts: PixivIllustJSON[];
+  [key: string]: unknown;
+}
+
+interface PixivFollowingResponse {
+  user_previews: PixivUserPreview[];
+  next_url: string | null;
+  [key: string]: unknown;
 }
 
 interface PixivIllustJSON {
@@ -35,6 +55,13 @@ interface PixivIllustJSON {
   title: string;
   type: "ugoira" | "illust" | "manga" | string;
   x_restrict?: number;
+  restrict?: number;
+  caption?: string;
+  tags?: Array<{ name: string; translated_name?: string | null }>;
+  page_count?: number;
+  visible?: boolean;
+  user?: UserData;
+  [key: string]: unknown;
   meta_single_page: {
     original_image_url?: string;
   };

@@ -4,8 +4,8 @@
  */
 
 import type PixivApi from "./pixiv-api-client.js";
-import appState from "./appState.js";
 import { isNsfwIllust } from "./illust-filter.js";
+import { DEFAULT_ILLUST_POLICY, type IllustPolicy } from "./illust-policy.js";
 import logger from "./logger.js";
 import { replacePixivImageUrl } from "./pixiv-image-url.js";
 
@@ -43,12 +43,15 @@ export class Illust {
     return object;
   }
 
-  static async getIllusts(illustJSON: PixivIllustJSON): Promise<Illust[]> {
+  static async getIllusts(
+    illustJSON: PixivIllustJSON,
+    policy: IllustPolicy = DEFAULT_ILLUST_POLICY,
+  ): Promise<Illust[]> {
     const illusts: Illust[] = [];
     const id = illustJSON.id;
 
     // Skip NSFW illustrations when filtering is enabled.
-    if (appState.filterNsfw && isNsfwIllust(illustJSON)) {
+    if (policy.filterNsfw && isNsfwIllust(illustJSON)) {
       logger.info(
         "filter",
         "illust.nsfw_skipped",
@@ -72,10 +75,10 @@ export class Illust {
         originalUrl
           .replace("img-original", "img-zip-ugoira")
           .replace(/_ugoira0\.(.*)/, "_ugoira1920x1080.zip"),
-        appState.imageSource,
+        policy.imageSource,
       );
 
-      if (appState.ugoiraMeta) {
+      if (policy.ugoiraMeta) {
         try {
           const res = await pixiv.ugoiraMetaData(id);
           const frames = res.ugoira_metadata.frames as UgoiraFrame[];
@@ -112,7 +115,7 @@ export class Illust {
       for (let i = 0; i < illustJSON.meta_pages.length; i++) {
         const url = replacePixivImageUrl(
           illustJSON.meta_pages[i]!.image_urls.original,
-          appState.imageSource,
+          policy.imageSource,
         );
         const ext = url.substring(url.lastIndexOf("."));
         illusts.push(
@@ -127,7 +130,7 @@ export class Illust {
     } else if (illustJSON.meta_single_page.original_image_url) {
       const url = replacePixivImageUrl(
         illustJSON.meta_single_page.original_image_url,
-        appState.imageSource,
+        policy.imageSource,
       );
       const ext = url.substring(url.lastIndexOf("."));
       illusts.push(new Illust(id, title, url, `(${id})${fileName}${ext}`));

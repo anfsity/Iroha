@@ -34,6 +34,7 @@ import axios, {
 import qs from "qs";
 import md5 from "blueimp-md5";
 import moment from "moment";
+import type { ProxyAgent } from "proxy-agent";
 import { sleep } from "./utils.js";
 import logger from "./logger.js";
 
@@ -52,13 +53,13 @@ function getHttp(): AxiosInstance {
   return http;
 }
 
-async function callApi(
+async function callApi<T = unknown>(
   url: string,
   options: AxiosRequestConfig,
   retry: number = 2,
   axiosInstance?: AxiosInstance,
   operationId: string = logger.createOperationId("api"),
-): Promise<any> {
+): Promise<T> {
   const finalUrl: string = /^https?:\/\//i.test(url) ? url : BASE_URL + url;
   const instance = axiosInstance || getHttp();
   const startedAt = Date.now();
@@ -96,8 +97,8 @@ async function callApi(
       },
     );
     return res.data;
-  } catch (rawErr: any) {
-    const err = rawErr as AxiosError<any>;
+  } catch (rawErr: unknown) {
+    const err = rawErr as AxiosError<unknown>;
     const status = err.response?.status;
     const baseContext = {
       method: options.method || "GET",
@@ -197,13 +198,13 @@ async function callApi(
 
 export type PixivOptions = {
   restrict?: "public" | "private";
-  [key: string]: any;
+  [key: string]: string | number | boolean | null | undefined;
 };
 
 export class PixivApi {
   private headers: Record<string, string>;
   private axiosInstance: AxiosInstance;
-  private auth: any = null;
+  private auth: PixivAuthInfo | null = null;
 
   public username?: undefined;
   public password?: undefined;
@@ -220,7 +221,7 @@ export class PixivApi {
     this.axiosInstance = getHttp();
   }
 
-  public static setAgent(agent: any): void {
+  public static setAgent(agent: ProxyAgent): void {
     const instance = getHttp();
     instance.defaults.httpsAgent = agent;
     instance.defaults.httpAgent = agent;
@@ -234,7 +235,10 @@ export class PixivApi {
     });
   }
 
-  public async tokenRequest(code: string, code_verifier: string): Promise<any> {
+  public async tokenRequest(
+    code: string,
+    code_verifier: string,
+  ): Promise<PixivAuthInfo> {
     const data = qs.stringify({
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
@@ -254,7 +258,7 @@ export class PixivApi {
     };
 
     try {
-      const data = await callApi(
+      const data = await callApi<PixivTokenResponse>(
         "https://oauth.secure.pixiv.net/auth/token",
         options,
         2,
@@ -262,7 +266,8 @@ export class PixivApi {
       );
       this.auth = data.response;
       return data.response;
-    } catch (err: any) {
+    } catch (rawError: unknown) {
+      const err = rawError as AxiosError<unknown>;
       if (err.response) {
         const error = new Error("Pixiv token request failed", { cause: err });
         (error as { status?: number; responseBody?: unknown }).status =
@@ -283,11 +288,14 @@ export class PixivApi {
     return Promise.resolve();
   }
 
-  public authInfo(): any {
+  public authInfo(): PixivAuthInfo {
+    if (!this.auth) throw new Error("Pixiv authentication required");
     return this.auth;
   }
 
-  public async refreshAccessToken(refreshToken?: string): Promise<any> {
+  public async refreshAccessToken(
+    refreshToken?: string,
+  ): Promise<PixivAuthInfo> {
     if ((!this.auth || !this.auth.refresh_token) && !refreshToken) {
       throw new Error("refresh_token required");
     }
@@ -297,7 +305,7 @@ export class PixivApi {
       get_secure_url: true,
       include_policy: true,
       grant_type: "refresh_token",
-      refresh_token: refreshToken || this.auth.refresh_token,
+      refresh_token: refreshToken || this.auth!.refresh_token,
     });
     const options: AxiosRequestConfig = {
       method: "POST",
@@ -306,7 +314,7 @@ export class PixivApi {
       }),
       data,
     };
-    const resData = await callApi(
+    const resData = await callApi<PixivTokenResponse>(
       "https://oauth.secure.pixiv.net/auth/token",
       options,
       2,
@@ -320,10 +328,10 @@ export class PixivApi {
     this.headers["Accept-Language"] = lang;
   }
 
-  public async requestUrl(
+  public async requestUrl<T = unknown>(
     url: string,
     options: AxiosRequestConfig = {},
-  ): Promise<any> {
+  ): Promise<T> {
     if (!url) {
       throw new Error("Url cannot be empty");
     }
@@ -340,15 +348,15 @@ export class PixivApi {
     } catch (err) {
       if (this.rememberPassword && this.username && this.password) {
         await (this as any).login(this.username, this.password);
-        options.headers.Authorization = `Bearer ${this.auth.access_token}`;
+        options.headers.Authorization = `Bearer ${this.auth!.access_token}`;
         return await callApi(url, options, 2, this.axiosInstance);
       }
       throw err;
     }
   }
 
-  public userState() {
-    return this.requestUrl("/v1/user/me/state");
+  public userState(): Promise<{ response?: unknown }> {
+    return this.requestUrl<{ response?: unknown }>("/v1/user/me/state");
   }
 
   public searchIllust(word: string, options?: PixivOptions) {
@@ -420,16 +428,26 @@ export class PixivApi {
     return this.requestUrl(`/v2/search/autocomplete?${qs.stringify({ word })}`);
   }
 
-  public userDetail(id: number | string, options?: PixivOptions) {
+  public userDetail(
+    id: number | string,
+    options?: PixivOptions,
+  ): Promise<{ user: UserData }> {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(Object.assign({ user_id: id }, options));
-    return this.requestUrl(`/v1/user/detail?${queryString}`);
+    return this.requestUrl<{ user: UserData }>(
+      `/v1/user/detail?${queryString}`,
+    );
   }
 
-  public userIllusts(id: number | string, options?: PixivOptions) {
+  public userIllusts(
+    id: number | string,
+    options?: PixivOptions,
+  ): Promise<PixivIllustResponse> {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(Object.assign({ user_id: id }, options));
-    return this.requestUrl(`/v1/user/illusts?${queryString}`);
+    return this.requestUrl<PixivIllustResponse>(
+      `/v1/user/illusts?${queryString}`,
+    );
   }
 
   public userNovels(id: number | string, options?: PixivOptions) {
@@ -438,12 +456,17 @@ export class PixivApi {
     return this.requestUrl(`/v1/user/novels?${queryString}`);
   }
 
-  public userBookmarksIllust(id: number | string, options?: PixivOptions) {
+  public userBookmarksIllust(
+    id: number | string,
+    options?: PixivOptions,
+  ): Promise<PixivIllustResponse> {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(
       Object.assign({ user_id: id, restrict: "public" }, options),
     );
-    return this.requestUrl(`/v1/user/bookmarks/illust?${queryString}`);
+    return this.requestUrl<PixivIllustResponse>(
+      `/v1/user/bookmarks/illust?${queryString}`,
+    );
   }
 
   public userBookmarkIllustTags(options?: PixivOptions) {
@@ -505,10 +528,15 @@ export class PixivApi {
     return this.requestUrl(`/v2/illust/related?${queryString}`);
   }
 
-  public illustDetail(id: number | string, options?: PixivOptions) {
+  public illustDetail(
+    id: number | string,
+    options?: PixivOptions,
+  ): Promise<PixivIllustDetailResponse> {
     if (!id) return Promise.reject(new Error("illust_id required"));
     const queryString = qs.stringify(Object.assign({ illust_id: id }, options));
-    return this.requestUrl(`/v1/illust/detail?${queryString}`);
+    return this.requestUrl<PixivIllustDetailResponse>(
+      `/v1/illust/detail?${queryString}`,
+    );
   }
 
   public illustNew(options?: PixivOptions) {
@@ -762,12 +790,17 @@ export class PixivApi {
     );
   }
 
-  public userFollowing(id: number | string, options?: PixivOptions) {
+  public userFollowing(
+    id: number | string,
+    options?: PixivOptions,
+  ): Promise<PixivFollowingResponse> {
     if (!id) return Promise.reject(new Error("user_id required"));
     const queryString = qs.stringify(
       Object.assign({ user_id: id, restrict: "public" }, options),
     );
-    return this.requestUrl(`/v1/user/following?${queryString}`);
+    return this.requestUrl<PixivFollowingResponse>(
+      `/v1/user/following?${queryString}`,
+    );
   }
 
   public userFollowDetail(id: number | string) {
@@ -788,9 +821,9 @@ export class PixivApi {
     return this.requestUrl(`/v1/user/mypixiv?${qs.stringify({ user_id: id })}`);
   }
 
-  public ugoiraMetaData(id: number | string) {
+  public ugoiraMetaData(id: number | string): Promise<PixivUgoiraMeta> {
     if (!id) return Promise.reject(new Error("illust_id required"));
-    return this.requestUrl(
+    return this.requestUrl<PixivUgoiraMeta>(
       `/v1/ugoira/metadata?${qs.stringify({ illust_id: id })}`,
     );
   }
