@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { isNsfwIllust } from "../src/illust-filter.js";
 import Illustrator from "../src/illustrator.js";

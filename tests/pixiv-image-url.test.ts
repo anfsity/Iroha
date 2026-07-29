@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 import { describe, expect, test } from "vitest";
 import { replacePixivImageUrl } from "../src/pixiv-image-url.js";
 

@@ -1,4 +1,8 @@
 /*
+ * Copyright (C) 2026 Anfsity
+ */
+
+/*
 https://github.com/alphasp/pixiv-api-client
 
 MIT License

@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";

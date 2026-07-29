@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 import type { ImageSource } from "./pixiv-image-url.js";
 import type { UgoiraFormat } from "./ugoira.js";
 

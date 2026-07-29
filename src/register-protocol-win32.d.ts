@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 declare module "register-protocol-win32" {
   function exists(name: string): Promise<boolean>;
   function install(name: string, command: string): Promise<void>;

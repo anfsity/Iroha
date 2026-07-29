@@ -1,4 +1,6 @@
 /**
+ * Copyright (C) 2026 Anfsity
+ *
  * Adapted from Tsuk1ko/pxder (https://github.com/Tsuk1ko/pxder)
  * Original file: src/illustrator.js
  */

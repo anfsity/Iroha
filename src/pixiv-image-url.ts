@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 export type ImageSource = "direct" | "pixivcat";
 
 export function isImageSource(value: unknown): value is ImageSource {

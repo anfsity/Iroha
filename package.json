@@ -1,7 +1,7 @@
 {
   "name": "@anfsity/iroha",
-  "version": "1.0.3",
-  "description": "",
+  "version": "1.0.4",
+  "description": "A terminal Pixiv illustration downloader",
   "main": "",
   "scripts": {
     "build": "tsc",
@@ -10,19 +10,19 @@
     "test": "vitest run"
   },
   "keywords": [],
-  "author": "",
+  "author": "Anfsity",
   "license": "GPL-3.0",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.3.0",
-      "onFail": "download"
-    }
-  },
+  "packageManager": "pnpm@11.10.0",
   "type": "module",
   "bin": {
     "iroha": "./dist/src/iroha.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "assets"
+  ],
   "devDependencies": {
     "@types/blueimp-md5": "^2.18.2",
     "@types/fs-extra": "^11.0.4",

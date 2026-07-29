@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 import * as readline from "node:readline";
 
 interface ActiveProgress {

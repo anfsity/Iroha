@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 import fse from "fs-extra";
 import os from "node:os";
 import path from "node:path";

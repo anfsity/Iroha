@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 import logger from "./logger.js";
 
 export default function logError(

@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 import fse from "fs-extra";
 import path from "node:path";
 import { getAppDataPath } from "./utils.js";

@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 import axios from "axios";
 import PixivApi from "../src/pixiv-api-client.js";
 import { vi, describe, test, expect, beforeEach } from "vitest";

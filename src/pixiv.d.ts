@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 interface PixivUgoiraMeta {
   ugoira_metadata: {
     frames: UgoiraFrame[];

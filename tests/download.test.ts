@@ -1,3 +1,7 @@
+/**
+ * Copyright (C) 2026 Anfsity
+ */
+
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
