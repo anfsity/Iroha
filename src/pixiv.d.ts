@@ -34,6 +34,7 @@ interface PixivIllustJSON {
   id: number | string;
   title: string;
   type: "ugoira" | "illust" | "manga" | string;
+  x_restrict?: number;
   meta_single_page: {
     original_image_url?: string;
   };

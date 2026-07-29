@@ -447,6 +447,11 @@ async function handleSettings(config: any): Promise<void> {
         value: "imageSource",
       },
       {
+        title:
+          `Filter NSFW: `.yellow + (config.filterNsfw ? "Enabled" : "Disabled"),
+        value: "filterNsfw",
+      },
+      {
         title: `Proxy: `.yellow + (config.proxy || "From env vars"),
         value: "proxy",
       },
@@ -483,6 +488,9 @@ async function handleSettings(config: any): Promise<void> {
         break;
       case "imageSource":
         await handleSettingImageSource(config);
+        break;
+      case "filterNsfw":
+        config.filterNsfw = !config.filterNsfw;
         break;
       case "proxy":
         await handleSettingProxy(config);

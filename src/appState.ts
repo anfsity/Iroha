@@ -7,6 +7,7 @@ export interface AppState {
   ugoiraMeta: boolean;
   ugoiraFormat: UgoiraFormat;
   imageSource: ImageSource;
+  filterNsfw: boolean;
   proxyAgent: ProxyAgent | null;
 }
 
@@ -15,6 +16,7 @@ const appState: AppState = {
   ugoiraMeta: true,
   ugoiraFormat: "zip",
   imageSource: "direct",
+  filterNsfw: false,
   proxyAgent: null,
 };
 

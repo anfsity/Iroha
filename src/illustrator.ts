@@ -4,6 +4,8 @@
  */
 
 import pLimit from "p-limit";
+import appState from "./appState.js";
+import { isNsfwIllust } from "./illust-filter.js";
 import Illust from "./illustration.js";
 import PixivApi from "./pixiv-api-client.js";
 
@@ -20,6 +22,8 @@ export class Illustrator {
       bookmark: null,
     },
   ) {}
+
+  public lastPageSkippedNsfw: boolean = false;
 
   async setExampleIllusts(pillustsJSON: PixivIllustJSON[]): Promise<void> {
     this.exampleIllusts = [];
@@ -72,15 +76,20 @@ export class Illustrator {
       }
     }
 
-    const result = json.illusts
-      ? (
-          await Promise.all(
-            json.illusts.map((illustJSON) =>
-              illustMetadataLimit(() => Illust.getIllusts(illustJSON)),
-            ),
-          )
-        ).flat()
-      : [];
+    const pageIllusts = json.illusts || [];
+    this.lastPageSkippedNsfw =
+      appState.filterNsfw && pageIllusts.some(isNsfwIllust);
+
+    const result =
+      pageIllusts.length > 0
+        ? (
+            await Promise.all(
+              pageIllusts.map((illustJSON: PixivIllustJSON) =>
+                illustMetadataLimit(() => Illust.getIllusts(illustJSON)),
+              ),
+            )
+          ).flat()
+        : [];
 
     this.next[type] = json.next_url;
 

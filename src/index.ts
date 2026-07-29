@@ -24,6 +24,7 @@ interface AppConfig {
   refresh_token?: string | null;
   proxy?: string | null;
   imageSource: ImageSource;
+  filterNsfw: boolean;
 }
 
 const defaultConfig: AppConfig = {
@@ -33,6 +34,7 @@ const defaultConfig: AppConfig = {
     ugoiraFormat: "zip",
   },
   imageSource: "direct",
+  filterNsfw: false,
 } as const;
 
 let __config: AppConfig;
@@ -67,6 +69,10 @@ export default class Pixiv {
     config.imageSource = isImageSource(config.imageSource)
       ? config.imageSource
       : defaultConfig.imageSource;
+    config.filterNsfw =
+      typeof config.filterNsfw === "boolean"
+        ? config.filterNsfw
+        : defaultConfig.filterNsfw;
 
     return config;
   }
@@ -106,6 +112,7 @@ export default class Pixiv {
     const targetConfig = config || (await this.readConfig());
     __config = targetConfig;
     appState.imageSource = targetConfig.imageSource ?? "direct";
+    appState.filterNsfw = targetConfig.filterNsfw ?? false;
     targetConfig.download.tmp = path.join(CONFIG_FILE_DIR, "tmp");
     Downloader.setConfig(targetConfig.download);
     await this.applyProxyConfig(targetConfig);

@@ -248,7 +248,9 @@ async function getDownloadListByIllustrator(
   const illustExists = async (illust: Illust) =>
     hasExpectedOutput(illust, dldir, ugoiraDir);
 
-  const exampleIllusts = illustrator.exampleIllusts;
+  // Cached examples do not retain x_restrict. Fetch fresh metadata when the
+  // filter is enabled instead of treating stale cached entries as safe.
+  const exampleIllusts = appState.filterNsfw ? [] : illustrator.exampleIllusts;
   if (exampleIllusts) {
     let existNum = 0;
     for (const ei of exampleIllusts) {
@@ -277,7 +279,10 @@ async function getDownloadListByIllustrator(
         cnt++;
       }
     }
-  } while (illustrator.hasNext("illust") && cnt > 0);
+  } while (
+    illustrator.hasNext("illust") &&
+    (cnt > 0 || illustrator.lastPageSkippedNsfw)
+  );
 
   utils.clearProgress(processDisplay);
 
@@ -317,7 +322,7 @@ export async function downloadByBookmark(
         cnt++;
       }
     }
-  } while (me.hasNext("bookmark") && cnt > 0);
+  } while (me.hasNext("bookmark") && (cnt > 0 || me.lastPageSkippedNsfw));
 
   utils.clearProgress(processDisplay);
   await downloadIllusts(illusts.reverse(), dldir, config.thread);

@@ -5,6 +5,7 @@
 
 import type PixivApi from "./pixiv-api-client.js";
 import appState from "./appState.js";
+import { isNsfwIllust } from "./illust-filter.js";
 import logger from "./logger.js";
 import { replacePixivImageUrl } from "./pixiv-image-url.js";
 
@@ -44,13 +45,26 @@ export class Illust {
 
   static async getIllusts(illustJSON: PixivIllustJSON): Promise<Illust[]> {
     const illusts: Illust[] = [];
+    const id = illustJSON.id;
+
+    // Skip NSFW illustrations when filtering is enabled.
+    if (appState.filterNsfw && isNsfwIllust(illustJSON)) {
+      logger.info(
+        "filter",
+        "illust.nsfw_skipped",
+        "Skipped an NSFW illustration",
+        {
+          context: { pid: id, xRestrict: illustJSON.x_restrict },
+        },
+      );
+      return illusts;
+    }
 
     // remove ASCII code like '\n', '\r', '\t'
     const title = illustJSON.title.replace(/[\x00-\x1F\x7F]/g, "");
     // remove unrelated char from title, for example: /summer swimsuit/ &* @photo$ -> summer swimsuit photo
     // but we havent perform unicode yet, this is a tricky prolem, let it go ~
     const fileName = title.replace(/[/\\:*?"<>|.&$]/g, "");
-    const id = illustJSON.id;
 
     if (illustJSON.type === "ugoira") {
       const originalUrl = illustJSON.meta_single_page.original_image_url || "";
