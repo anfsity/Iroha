@@ -80,6 +80,12 @@ async function main(config: AppConfig, options: CliOptions): Promise<void> {
       ugoiraFormat: policy.ugoiraFormat,
       filterNsfw: policy.filterNsfw,
       imageSource: policy.imageSource,
+      illustrationFilter: {
+        enabled: policy.filter.enabled,
+        minViews: policy.filter.minViews,
+        recentMonths: policy.filter.recentMonths,
+        wallpaperMode: policy.filter.wallpaperMode,
+      },
     },
   });
   if (typeof config.proxy === "string" && config.proxy.length > 0) {

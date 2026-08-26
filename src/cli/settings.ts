@@ -9,6 +9,7 @@ import "colors";
 import Path from "path";
 import prompts from "prompts";
 import { type AppConfig, writeConfig } from "../config.js";
+import { isIllustFilterActive, isWallpaperMode } from "../illust-filter.js";
 import { isImageSource } from "../pixiv-image-url.js";
 import logger from "../logger.js";
 import { checkProxy } from "../proxy.js";
@@ -61,6 +62,14 @@ export async function handleSettings(config: AppConfig): Promise<void> {
         value: "filterNsfw",
       },
       {
+        title:
+          `Illustration filter: `.yellow +
+          (isIllustFilterActive(config.filter)
+            ? `${config.filter.enabled ? "Enabled" : "Wallpaper only"} (${config.filter.minViews} views, ${config.filter.recentMonths} months, ${config.filter.wallpaperMode})`
+            : "Disabled"),
+        value: "illustFilter",
+      },
+      {
         title: `Proxy: `.yellow + (config.proxy || "From env vars"),
         value: "proxy",
       },
@@ -100,6 +109,9 @@ export async function handleSettings(config: AppConfig): Promise<void> {
       case "filterNsfw":
         config.filterNsfw = !config.filterNsfw;
         break;
+      case "illustFilter":
+        await handleSettingIllustFilter(config);
+        break;
       case "proxy":
         await handleSettingProxy(config);
         break;
@@ -107,6 +119,109 @@ export async function handleSettings(config: AppConfig): Promise<void> {
     await writeConfig(config);
   }
   logger.info("config", "settings.saved", "Settings saved");
+}
+
+async function handleSettingIllustFilter(config: AppConfig): Promise<void> {
+  while (true) {
+    const { action } = await prompts(
+      {
+        type: "select",
+        name: "action",
+        message: "Illustration filter:",
+        choices: [
+          {
+            title:
+              `Quality filter: `.yellow +
+              (config.filter.enabled ? "Enabled" : "Disabled"),
+            value: "enabled",
+          },
+          {
+            title: `Minimum views: `.yellow + config.filter.minViews,
+            value: "minViews",
+          },
+          {
+            title:
+              `Recent window: `.yellow + `${config.filter.recentMonths} months`,
+            value: "recentMonths",
+          },
+          {
+            title: `Wallpaper filter: `.yellow + config.filter.wallpaperMode,
+            value: "wallpaperMode",
+          },
+          { title: "Back".magenta, value: "back" },
+        ],
+      },
+      { onCancel },
+    );
+
+    if (!action || action === "back") return;
+    if (action === "enabled") {
+      config.filter.enabled = !config.filter.enabled;
+    } else if (action === "minViews") {
+      await handleSettingFilterMinViews(config);
+    } else if (action === "recentMonths") {
+      await handleSettingFilterRecentMonths(config);
+    } else if (action === "wallpaperMode") {
+      await handleSettingWallpaperMode(config);
+    }
+  }
+}
+
+async function handleSettingFilterMinViews(config: AppConfig): Promise<void> {
+  const { value } = await prompts(
+    {
+      type: "number",
+      name: "value",
+      message: "Minimum views:",
+      initial: config.filter.minViews,
+      float: false,
+      validate: (input) =>
+        Number.isInteger(input) && input >= 0
+          ? true
+          : "Must be a non-negative integer",
+    },
+    { onCancel },
+  );
+  if (value !== undefined) config.filter.minViews = value;
+}
+
+async function handleSettingFilterRecentMonths(
+  config: AppConfig,
+): Promise<void> {
+  const { value } = await prompts(
+    {
+      type: "number",
+      name: "value",
+      message: "Recent window (months):",
+      initial: config.filter.recentMonths,
+      float: false,
+      validate: (input) =>
+        Number.isInteger(input) && input >= 0
+          ? true
+          : "Must be a non-negative integer",
+    },
+    { onCancel },
+  );
+  if (value !== undefined) config.filter.recentMonths = value;
+}
+
+async function handleSettingWallpaperMode(config: AppConfig): Promise<void> {
+  const choices = ["none", "desktop", "mobile"] as const;
+  const { value } = await prompts(
+    {
+      type: "select",
+      name: "value",
+      message: "Wallpaper filter:",
+      choices: [
+        { title: "Disabled", value: "none" },
+        { title: "Desktop wallpaper", value: "desktop" },
+        { title: "Mobile wallpaper", value: "mobile" },
+      ],
+      initial: choices.indexOf(config.filter.wallpaperMode),
+    },
+    { onCancel },
+  );
+  if (isWallpaperMode(value)) config.filter.wallpaperMode = value;
 }
 
 async function handleSettingDownloadPath(config: AppConfig): Promise<void> {

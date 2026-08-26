@@ -6,7 +6,7 @@
  */
 
 import pLimit from "p-limit";
-import { isNsfwIllust } from "./illust-filter.js";
+import { isIllustAllowed, isNsfwIllust } from "./illust-filter.js";
 import { DEFAULT_ILLUST_POLICY, type IllustPolicy } from "./illust-policy.js";
 import Illust from "./illustration.js";
 import PixivApi from "./pixiv-api-client.js";
@@ -26,6 +26,7 @@ export class Illustrator {
     public policy: IllustPolicy = DEFAULT_ILLUST_POLICY,
   ) {}
 
+  public lastPageSkipped: boolean = false;
   public lastPageSkippedNsfw: boolean = false;
 
   async setExampleIllusts(pillustsJSON: PixivIllustJSON[]): Promise<void> {
@@ -82,6 +83,11 @@ export class Illustrator {
     const pageIllusts = json.illusts || [];
     this.lastPageSkippedNsfw =
       this.policy.filterNsfw && pageIllusts.some(isNsfwIllust);
+    this.lastPageSkipped = pageIllusts.some(
+      (illustJSON) =>
+        (this.policy.filterNsfw && isNsfwIllust(illustJSON)) ||
+        !isIllustAllowed(illustJSON, this.policy.filter),
+    );
 
     const result =
       pageIllusts.length > 0

@@ -6,7 +6,7 @@
  */
 
 import type PixivApi from "./pixiv-api-client.js";
-import { isNsfwIllust } from "./illust-filter.js";
+import { isIllustAllowed, isNsfwIllust } from "./illust-filter.js";
 import { DEFAULT_ILLUST_POLICY, type IllustPolicy } from "./illust-policy.js";
 import logger from "./logger.js";
 import { replacePixivImageUrl } from "./pixiv-image-url.js";
@@ -60,6 +60,23 @@ export class Illust {
         "Skipped an NSFW illustration",
         {
           context: { pid: id, xRestrict: illustJSON.x_restrict },
+        },
+      );
+      return illusts;
+    }
+
+    if (!isIllustAllowed(illustJSON, policy.filter)) {
+      logger.debug(
+        "filter",
+        "illust.filtered",
+        "Skipped an illustration that did not match the configured filter",
+        {
+          context: {
+            pid: id,
+            totalView: illustJSON.total_view,
+            createDate: illustJSON.create_date,
+            wallpaperMode: policy.filter.wallpaperMode,
+          },
         },
       );
       return illusts;

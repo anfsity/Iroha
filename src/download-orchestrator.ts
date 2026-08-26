@@ -22,6 +22,7 @@ import {
 import { download } from "./download-transport.js";
 import Illust from "./illustration.js";
 import Illustrator from "./illustrator.js";
+import { isIllustFilterActive } from "./illust-filter.js";
 import type { IllustPolicy } from "./illust-policy.js";
 import logger from "./logger.js";
 import * as utils from "./utils.js";
@@ -120,11 +121,15 @@ async function getDownloadListByIllustrator(
   const illustExists = (illust: Illust) =>
     hasExpectedOutput(illust, dldir, context.policy.ugoiraFormat, ugoiraDir);
 
-  // Cached examples do not retain x_restrict. Fetch fresh metadata when the
-  // filter is enabled instead of treating stale cached entries as safe.
-  const exampleIllusts = context.policy.filterNsfw
-    ? []
-    : illustrator.exampleIllusts;
+  // Cached examples do not retain filter metadata. Fetch fresh metadata when
+  // any illustration filter is enabled instead of treating stale entries as
+  // safe.
+  const exampleIllusts =
+    context.policy.filterNsfw || isIllustFilterActive(context.policy.filter)
+      ? []
+      : illustrator.exampleIllusts;
+  const mustScanAllPages =
+    context.policy.filterNsfw || isIllustFilterActive(context.policy.filter);
   let existNum = 0;
   for (const example of exampleIllusts) {
     if (await illustExists(example)) {
@@ -153,7 +158,7 @@ async function getDownloadListByIllustrator(
       }
     } while (
       illustrator.hasNext("illust") &&
-      (count > 0 || illustrator.lastPageSkippedNsfw)
+      (mustScanAllPages || count > 0 || illustrator.lastPageSkipped)
     );
   } finally {
     utils.clearProgress(processDisplay);
@@ -180,6 +185,8 @@ export async function downloadByBookmark(
 
   const illusts: Illust[] = [];
   const processDisplay = utils.showProgress(() => illusts.length);
+  const mustScanAllPages =
+    context.policy.filterNsfw || isIllustFilterActive(context.policy.filter);
   try {
     let count: number;
     do {
@@ -198,7 +205,10 @@ export async function downloadByBookmark(
           count++;
         }
       }
-    } while (me.hasNext("bookmark") && (count > 0 || me.lastPageSkippedNsfw));
+    } while (
+      me.hasNext("bookmark") &&
+      (mustScanAllPages || count > 0 || me.lastPageSkipped)
+    );
   } finally {
     utils.clearProgress(processDisplay);
   }

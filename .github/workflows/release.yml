@@ -35,4 +35,3 @@ jobs:
             iroha-linux-x64
             iroha-windows.exe
             README.md
-          draft: true

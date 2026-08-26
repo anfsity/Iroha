@@ -35,6 +35,48 @@ describe("application configuration", () => {
       filterNsfw: true,
       ugoiraMeta: false,
       ugoiraFormat: "both",
+      filter: {
+        enabled: false,
+        minViews: 4000,
+        recentMonths: 12,
+        wallpaperMode: "none",
+      },
+    });
+  });
+
+  test("normalizes illustration filter settings", () => {
+    const config = normalizeConfig({
+      filter: {
+        enabled: true,
+        minViews: 4000,
+        recentMonths: 6,
+        wallpaperMode: "desktop",
+      },
+    });
+
+    expect(config.filter).toEqual({
+      enabled: true,
+      minViews: 4000,
+      recentMonths: 6,
+      wallpaperMode: "desktop",
+    });
+  });
+
+  test("falls back to safe filter defaults for invalid values", () => {
+    const config = normalizeConfig({
+      filter: {
+        enabled: true,
+        minViews: -1,
+        recentMonths: 1.5,
+        wallpaperMode: "both" as never,
+      },
+    });
+
+    expect(config.filter).toEqual({
+      enabled: true,
+      minViews: 4000,
+      recentMonths: 12,
+      wallpaperMode: "none",
     });
   });
 });

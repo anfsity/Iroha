@@ -6,6 +6,11 @@ import fse from "fs-extra";
 import path from "node:path";
 import { getAppDataPath } from "./utils.js";
 import { isImageSource, type ImageSource } from "./pixiv-image-url.js";
+import {
+  DEFAULT_ILLUST_FILTER,
+  isWallpaperMode,
+  type IllustFilterConfig,
+} from "./illust-filter.js";
 import { DEFAULT_ILLUST_POLICY, type IllustPolicy } from "./illust-policy.js";
 import { isUgoiraFormat, type UgoiraFormat } from "./ugoira.js";
 
@@ -24,10 +29,12 @@ export interface AppConfig {
   proxy?: string | null;
   imageSource: ImageSource;
   filterNsfw: boolean;
+  filter: IllustFilterConfig;
 }
 
-export type RawAppConfig = Partial<Omit<AppConfig, "download">> & {
+export type RawAppConfig = Partial<Omit<AppConfig, "download" | "filter">> & {
   download?: Partial<DownloadConfig>;
+  filter?: Partial<IllustFilterConfig>;
   ugoiraFormat?: unknown;
 };
 
@@ -42,6 +49,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
   imageSource: "direct",
   filterNsfw: false,
+  filter: { ...DEFAULT_ILLUST_FILTER },
 };
 
 export function normalizeConfig(raw: RawAppConfig): AppConfig {
@@ -51,6 +59,8 @@ export function normalizeConfig(raw: RawAppConfig): AppConfig {
     source.download && typeof source.download === "object"
       ? source.download
       : {};
+  const rawFilter =
+    source.filter && typeof source.filter === "object" ? source.filter : {};
   const configuredUgoiraFormat = rawDownload.ugoiraFormat ?? legacyUgoiraFormat;
 
   return {
@@ -84,7 +94,31 @@ export function normalizeConfig(raw: RawAppConfig): AppConfig {
       typeof source.filterNsfw === "boolean"
         ? source.filterNsfw
         : DEFAULT_CONFIG.filterNsfw,
+    filter: {
+      enabled:
+        typeof rawFilter.enabled === "boolean"
+          ? rawFilter.enabled
+          : DEFAULT_CONFIG.filter.enabled,
+      minViews: isNonNegativeInteger(rawFilter.minViews)
+        ? rawFilter.minViews
+        : DEFAULT_CONFIG.filter.minViews,
+      recentMonths: isNonNegativeInteger(rawFilter.recentMonths)
+        ? rawFilter.recentMonths
+        : DEFAULT_CONFIG.filter.recentMonths,
+      wallpaperMode: isWallpaperMode(rawFilter.wallpaperMode)
+        ? rawFilter.wallpaperMode
+        : DEFAULT_CONFIG.filter.wallpaperMode,
+    },
   };
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    Number.isFinite(value) &&
+    value >= 0
+  );
 }
 
 export function getIllustPolicy(
@@ -96,6 +130,7 @@ export function getIllustPolicy(
     imageSource: config.imageSource,
     filterNsfw: config.filterNsfw,
     ugoiraFormat: config.download.ugoiraFormat,
+    filter: { ...config.filter },
     ...overrides,
   };
 }

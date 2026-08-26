@@ -63,6 +63,12 @@ interface PixivIllustJSON {
   caption?: string;
   tags?: Array<{ name: string; translated_name?: string | null }>;
   page_count?: number;
+  width?: number;
+  height?: number;
+  create_date?: string;
+  total_view?: number;
+  total_bookmarks?: number;
+  total_comments?: number;
   visible?: boolean;
   user?: UserData;
   [key: string]: unknown;
