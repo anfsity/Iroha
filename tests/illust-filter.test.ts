@@ -123,13 +123,19 @@ describe("illustration filtering", () => {
     expect(isIllustFilterActive(DEFAULT_ILLUST_FILTER)).toBe(false);
   });
 
-  test("recognizes desktop wallpaper dimensions", () => {
+  test("recognizes desktop wallpaper ratios", () => {
     const config = {
       ...DEFAULT_ILLUST_FILTER,
       wallpaperMode: "desktop" as const,
     };
 
     expect(isIllustAllowed(makeIllust(), config, NOW)).toBe(true);
+    expect(
+      isIllustAllowed(makeIllust({ width: 100, height: 60 }), config, NOW),
+    ).toBe(true);
+    expect(
+      isIllustAllowed(makeIllust({ width: 100, height: 100 }), config, NOW),
+    ).toBe(false);
     expect(
       isIllustAllowed(makeIllust({ width: 1080, height: 1920 }), config, NOW),
     ).toBe(false);

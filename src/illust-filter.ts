@@ -24,8 +24,6 @@ export const DEFAULT_ILLUST_FILTER: IllustFilterConfig = {
   wallpaperMode: "none",
 };
 
-const DESKTOP_MIN_WIDTH = 1920;
-const DESKTOP_MIN_HEIGHT = 1080;
 const DESKTOP_MIN_RATIO = 1.5;
 const DESKTOP_MAX_RATIO = 3.8;
 const MOBILE_MIN_WIDTH = 720;
@@ -120,12 +118,7 @@ function isWallpaperIllust(
 
   const ratio = width / height;
   if (mode === "desktop") {
-    return (
-      width >= DESKTOP_MIN_WIDTH &&
-      height >= DESKTOP_MIN_HEIGHT &&
-      ratio >= DESKTOP_MIN_RATIO &&
-      ratio <= DESKTOP_MAX_RATIO
-    );
+    return ratio >= DESKTOP_MIN_RATIO && ratio <= DESKTOP_MAX_RATIO;
   }
 
   const portraitRatio = height / width;
